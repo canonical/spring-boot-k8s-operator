@@ -1,0 +1,23 @@
+name: spring-boot-k8s
+
+display-name: Spring Boot
+
+summary: Turn any Spring Boot application into a charm.
+
+description: Spring Boot charm can turn any Spring Boot application into a charm.
+
+docs: ""
+
+issues: https://github.com/canonical/spring-boot-k8s-operator/issues
+
+maintainers:
+  - launchpad.net/~canonical-is-devops
+
+containers:
+  spring-boot-app:
+    resource: spring-boot-app-image
+
+resources:
+  spring-boot-app-image:
+    type: oci-image
+    description: Spring Boot application image.
