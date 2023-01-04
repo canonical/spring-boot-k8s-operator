@@ -21,3 +21,6 @@ resources:
   spring-boot-app-image:
     type: oci-image
     description: Spring Boot application image.
+
+assumes:
+  - k8s-api
