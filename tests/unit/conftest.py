@@ -7,6 +7,7 @@ import ops.testing
 import pytest
 
 from charm import SpringBootCharm
+from tests.unit.spring_boot_patch import SpringBootPatch
 
 
 @pytest.fixture(name="harness")
@@ -19,3 +20,14 @@ def harness_fixture():
 
     harness.cleanup()
     ops.testing.SIMULATE_CAN_CONNECT = False
+
+
+@pytest.fixture(name="patch")
+def patch_fixture(harness):
+    """Patch system for unit tests."""
+    patch = SpringBootPatch()
+
+    yield patch
+
+    if patch.started:
+        patch.stop()

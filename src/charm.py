@@ -6,8 +6,12 @@
 
 import logging
 
-from ops.charm import CharmBase
+import ops.charm
+from ops.charm import CharmBase, EventBase
 from ops.main import main
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+
+from exceptions import ReconciliationError
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +22,62 @@ class SpringBootCharm(CharmBase):
     def __init__(self, *args):
         """Initialize the instance."""
         super().__init__(*args)
+        self.framework.observe(self.on.config_changed, self.reconciliation)
+
+    def _spring_boot_container(self) -> ops.model.Container:
+        """Retrieve the container for the Spring Boot application.
+
+        Returns:
+            An instance of :class:`ops.charm.Container` represents the Spring Boot container.
+        """
+        container = self.unit.get_container("spring-boot-app")
+        return container
+
+    def _generate_spring_boot_layer(self) -> dict:
+        """Generate Spring Boot service layer for pebble.
+
+        Returns:
+            Spring Boot service layer configuration, in the form of a dict
+        """
+        container = self._spring_boot_container()
+        if not container.isdir("/app"):
+            raise ReconciliationError(new_status=BlockedStatus("dir /app does not exist"))
+        files_in_app = container.list_files("/app")
+        jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
+        if not jar_files:
+            raise ReconciliationError(new_status=BlockedStatus("no jar file exists in /app"))
+        if len(jar_files) > 1:
+            raise ReconciliationError(new_status=BlockedStatus("multiple jar files exist in /app"))
+        jar_file = jar_files[0]
+        return {
+            "services": {
+                "spring-boot-app": {
+                    "override": "replace",
+                    "summary": "Spring Boot application service",
+                    "command": f'java -jar "{jar_file}"',
+                    "startup": "enabled",
+                }
+            },
+        }
+
+    def _service_reconciliation(self):
+        container = self._spring_boot_container()
+        if not container.can_connect():
+            raise ReconciliationError(
+                new_status=WaitingStatus("waiting for pebble"), defer_event=True
+            )
+        container.add_layer("spring-boot-app", self._generate_spring_boot_layer(), combine=True)
+        container.replan()
+
+    def reconciliation(self, event: EventBase):
+        try:
+            self.unit.status = MaintenanceStatus("start reconciliation process")
+            self._service_reconciliation()
+            self.unit.status = ActiveStatus()
+        except ReconciliationError as error:
+            self.unit.status = error.new_status
+            if error.defer_event:
+                event.defer()
 
 
 if __name__ == "__main__":  # pragma: nocover
