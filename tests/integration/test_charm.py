@@ -34,6 +34,6 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list):
         ),
         ops_test.model.wait_for_idle(apps=[app_name], status="active"),
     )
-    unit_ips = get_unit_ip_list()
+    unit_ips = await get_unit_ip_list()
     for unit_ip in unit_ips:
-        assert requests.get(f"http://{unit_ip}:8080/hello-world").status_code == 200
+        assert requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5).status_code == 200

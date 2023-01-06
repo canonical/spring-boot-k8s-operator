@@ -1,5 +1,8 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
+
+"""The mocking and patching system for Spring Boot charm unit tests."""
+
 import pathlib
 import tempfile
 import typing
@@ -8,15 +11,13 @@ from unittest.mock import MagicMock, patch
 import ops.model
 import ops.pebble
 
-"""The mocking and patching system for Spring Boot charm unit tests."""
-
 
 class ContainerFileSystemMock:
     """Mock class for container file subsystem."""
 
     def __init__(self):
         """Initialize the :class:`ContainerFileSystemMock` instance."""
-        self.tempdir = tempfile.TemporaryDirectory()
+        self.tempdir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.tempdir_path = pathlib.Path(self.tempdir.name)
 
     def _path_convert(self, path: str) -> pathlib.Path:
@@ -25,20 +26,23 @@ class ContainerFileSystemMock:
 
     def push(self, path: str, source: bytes):
         """Mock function for :meth:`ops.model.Container.push`."""
-        path = self._path_convert(path)
-        path.parent.mkdir(exist_ok=True)
-        path.write_bytes(source)
+        converted_path = self._path_convert(path)
+        converted_path.parent.mkdir(exist_ok=True)
+        converted_path.write_bytes(source)
 
     def list_files(self, path: str):
         """Mock function for :meth:`ops.model.Container.list_files`."""
-        path = self._path_convert(path)
+        converted_path = self._path_convert(path)
         file_list = []
         try:
-            dir_iter = path.iterdir()
-        except FileNotFoundError:
+            dir_iter = converted_path.iterdir()
+        except FileNotFoundError as exc:
             raise ops.pebble.APIError(
-                body={}, code=404, status="", message=f"stat {path}: no such file or directory"
-            )
+                body={},
+                code=404,
+                status="",
+                message=f"stat {converted_path}: no such file or directory",
+            ) from exc
         for file in dir_iter:
             file_info = MagicMock()
             file_info.name = file.name

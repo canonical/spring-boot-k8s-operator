@@ -1,13 +1,16 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# pylint: disable=unused-argument
+
 """pytest fixtures for the integration test."""
 
 import ops.testing
 import pytest
 
 from charm import SpringBootCharm
-from tests.unit.spring_boot_patch import SpringBootPatch
+
+from .spring_boot_patch import SpringBootPatch
 
 
 @pytest.fixture(name="harness")

@@ -70,6 +70,7 @@ class SpringBootCharm(CharmBase):
         container.replan()
 
     def reconciliation(self, event: EventBase):
+        """Run the main reconciliation process of Spring Boot charm."""
         try:
             self.unit.status = MaintenanceStatus("start reconciliation process")
             self._service_reconciliation()

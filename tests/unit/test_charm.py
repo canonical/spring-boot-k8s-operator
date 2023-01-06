@@ -1,6 +1,8 @@
 # Copyright 2022 Canonical Ltd.
 # See LICENSE file for licensing details.
 
+# pylint: disable=protected-access
+
 """Spring Boot charm unit tests."""
 import ops.charm
 import pytest
