@@ -30,8 +30,7 @@ class SpringBootCharm(CharmBase):
         Returns:
             An instance of :class:`ops.charm.Container` represents the Spring Boot container.
         """
-        container = self.unit.get_container("spring-boot-app")
-        return container
+        return self.unit.get_container("spring-boot-app")
 
     def _generate_spring_boot_layer(self) -> dict:
         """Generate Spring Boot service layer for pebble.
@@ -41,13 +40,13 @@ class SpringBootCharm(CharmBase):
         """
         container = self._spring_boot_container()
         if not container.isdir("/app"):
-            raise ReconciliationError(new_status=BlockedStatus("dir /app does not exist"))
+            raise ReconciliationError(new_status=BlockedStatus("Directory /app does not exist"))
         files_in_app = container.list_files("/app")
         jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
         if not jar_files:
-            raise ReconciliationError(new_status=BlockedStatus("no jar file exists in /app"))
+            raise ReconciliationError(new_status=BlockedStatus("No jar file found in /app"))
         if len(jar_files) > 1:
-            raise ReconciliationError(new_status=BlockedStatus("multiple jar files exist in /app"))
+            raise ReconciliationError(new_status=BlockedStatus("Multiple jar files found in /app"))
         jar_file = jar_files[0]
         return {
             "services": {
@@ -71,7 +70,7 @@ class SpringBootCharm(CharmBase):
         container = self._spring_boot_container()
         if not container.can_connect():
             raise ReconciliationError(
-                new_status=WaitingStatus("waiting for pebble"), defer_event=True
+                new_status=WaitingStatus("Waiting for pebble"), defer_event=True
             )
         container.add_layer("spring-boot-app", self._generate_spring_boot_layer(), combine=True)
         container.replan()
@@ -79,7 +78,7 @@ class SpringBootCharm(CharmBase):
     def reconciliation(self, event: EventBase):
         """Run the main reconciliation process of Spring Boot charm."""
         try:
-            self.unit.status = MaintenanceStatus("start reconciliation process")
+            self.unit.status = MaintenanceStatus("Start reconciliation process")
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
         except ReconciliationError as error:
