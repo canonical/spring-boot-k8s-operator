@@ -35,7 +35,7 @@ def test_sprint_boot_pebble_layer(harness, patch):
             "wordpress-ready": {
                 "override": "replace",
                 "level": "alive",
-                "http": {"url": "http://localhost/actuator/health"},
+                "http": {"url": "http://localhost:8080/actuator/health"},
             },
         },
     }
@@ -79,3 +79,15 @@ def test_charm_start(harness, patch):
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     harness.update_config({})
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
+
+
+def test_java_application_type_detection_failure(harness, patch):
+    """
+    arrange: prepare the simulated Spring Boot application container without any file.
+    act: start the charm.
+    assert: Spring Boot charm should be in blocking status.
+    """
+    patch.start()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.begin_with_initial_hooks()
+    assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
