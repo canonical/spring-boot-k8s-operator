@@ -26,7 +26,12 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconciliation)
 
     def _detect_java_application(self) -> ExecutableJarApplication:
-        """Detect the type of the Java application inside the Spring Boot application image."""
+        """Detect the type of the Java application inside the Spring Boot application image.
+
+        Returns:
+            One of the subclasses of :class:`java_application.JavaApplicationBase` represents
+            one Java application type.
+        """
         container = self._spring_boot_container()
         if container.isdir("/app"):
             files_in_app = container.list_files("/app")
@@ -75,7 +80,7 @@ class SpringBootCharm(CharmBase):
                 "wordpress-ready": {
                     "override": "replace",
                     "level": "alive",
-                    "http": {"url": "http://localhost/actuator/health"},
+                    "http": {"url": "http://localhost:8080/actuator/health"},
                 },
             },
         }
