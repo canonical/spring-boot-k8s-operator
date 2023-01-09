@@ -58,6 +58,13 @@ class SpringBootCharm(CharmBase):
                     "startup": "enabled",
                 }
             },
+            "checks": {
+                "wordpress-ready": {
+                    "override": "replace",
+                    "level": "alive",
+                    "http": {"url": "http://localhost/actuator/health"},
+                },
+            },
         }
 
     def _service_reconciliation(self):
