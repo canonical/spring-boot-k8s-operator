@@ -8,23 +8,23 @@ import asyncio
 import logging
 
 import pytest
-from pytest import Config
+import requests
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest, pytestconfig: Config):
+async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list):
     """
     arrange: none.
-    act: build the charm-under-test and deploy it together with related charms.
-    assert: on the unit status before any relations/configurations take place.
+    act: build the Spring Boot charm and deploy it.
+    assert: Spring Boot application in all units is up and running
     """
     assert ops_test.model
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
-    resources = {"spring-boot-app-image": pytestconfig.getoption("--spring-boot-app-image")}
+    resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"}
 
     # Deploy the charm and wait for idle
     app_name = "spring-boot-k8s"
@@ -32,5 +32,8 @@ async def test_build_and_deploy(ops_test: OpsTest, pytestconfig: Config):
         ops_test.model.deploy(
             charm, resources=resources, application_name=app_name, series="jammy"
         ),
-        ops_test.model.wait_for_idle(apps=[app_name], raise_on_blocked=True, timeout=1000),
+        ops_test.model.wait_for_idle(apps=[app_name], status="active"),
     )
+    unit_ips = await get_unit_ip_list()
+    for unit_ip in unit_ips:
+        assert requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5).status_code == 200
