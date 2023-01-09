@@ -27,7 +27,7 @@ def test_sprint_boot_pebble_layer(harness, patch):
             "spring-boot-app": {
                 "override": "replace",
                 "summary": "Spring Boot application service",
-                "command": 'java -jar "test.jar"',
+                "command": 'java -jar "/app/test.jar"',
                 "startup": "enabled",
             }
         },

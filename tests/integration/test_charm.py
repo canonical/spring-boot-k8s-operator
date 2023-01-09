@@ -24,7 +24,7 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list):
     assert ops_test.model
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
-    resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:2.7"}
+    resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"}
 
     # Deploy the charm and wait for idle
     app_name = "spring-boot-k8s"

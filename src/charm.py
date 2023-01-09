@@ -12,6 +12,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 from exceptions import ReconciliationError
+from java_application import ExecutableJarApplication
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,22 @@ class SpringBootCharm(CharmBase):
         """Initialize the instance."""
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
+
+    def _detect_java_application(self) -> ExecutableJarApplication:
+        """Detect the type of the Java application inside the Spring Boot application image."""
+        container = self._spring_boot_container()
+        if container.isdir("/app"):
+            files_in_app = container.list_files("/app")
+            jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
+            if not jar_files:
+                raise ReconciliationError(new_status=BlockedStatus("No jar file found in /app"))
+            if len(jar_files) > 1:
+                raise ReconciliationError(
+                    new_status=BlockedStatus("Multiple jar files found in /app")
+                )
+            jar_file = jar_files[0]
+            return ExecutableJarApplication(executable_jar_path=f"/app/{jar_file}")
+        raise ReconciliationError(new_status=BlockedStatus("Unknown Java application type"))
 
     def _spring_boot_container(self) -> ops.model.Container:
         """Retrieve the container for the Spring Boot application.
@@ -38,22 +55,19 @@ class SpringBootCharm(CharmBase):
         Returns:
             Spring Boot service layer configuration, in the form of a dict
         """
-        container = self._spring_boot_container()
-        if not container.isdir("/app"):
-            raise ReconciliationError(new_status=BlockedStatus("Directory /app does not exist"))
-        files_in_app = container.list_files("/app")
-        jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
-        if not jar_files:
-            raise ReconciliationError(new_status=BlockedStatus("No jar file found in /app"))
-        if len(jar_files) > 1:
-            raise ReconciliationError(new_status=BlockedStatus("Multiple jar files found in /app"))
-        jar_file = jar_files[0]
+        java_app = self._detect_java_application()
+        if isinstance(java_app, ExecutableJarApplication):
+            command = f'java -jar "{java_app.executable_jar_path}"'
+        else:
+            RuntimeError(
+                "Unexpected Java application type returned from Java application type detection"
+            )
         return {
             "services": {
                 "spring-boot-app": {
                     "override": "replace",
                     "summary": "Spring Boot application service",
-                    "command": f'java -jar "{jar_file}"',
+                    "command": command,
                     "startup": "enabled",
                 }
             },
