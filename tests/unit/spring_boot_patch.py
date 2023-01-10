@@ -2,8 +2,9 @@
 # See LICENSE file for licensing details.
 
 """The mocking and patching system for Spring Boot charm unit tests."""
-
+import io
 import pathlib
+import tarfile
 import tempfile
 import typing
 from unittest.mock import MagicMock, patch
@@ -12,13 +13,86 @@ import ops.model
 import ops.pebble
 
 
+class OCIImageMock:
+    """The class to simulate an OCI image."""
+
+    class OCIImageMockBuilder:
+        """Helper class to create a :class:`OCIImageMock` instance."""
+
+        def __init__(self):
+            """Initialize the :class:`OCIImageMockBuilder` instance."""
+            self.tar_file_obj = io.BytesIO()
+            # pylint: disable=consider-using-with
+            self.tar_file = tarfile.TarFile(mode="w", fileobj=self.tar_file_obj)
+
+        def add_file(self, path: str, content: bytes) -> "OCIImageMock.OCIImageMockBuilder":
+            """Add a file to the simulated OCI image.
+
+            Args:
+                path: the absolute path for this file in simulated OCI image, all parent
+                    directories will be created if not exist.
+                content: file content in bytes.
+            """
+            assert path.startswith("/") and not path.endswith("/")
+            tar_info = tarfile.TarInfo(path.removeprefix("/"))
+            tar_info.size = len(content)
+            self.tar_file.addfile(tar_info, io.BytesIO(content))
+            return self
+
+        def add_dir(self, path: str) -> "OCIImageMock.OCIImageMockBuilder":
+            """Add a directory to the simulated OCI image.
+
+            Args:
+                path: the absolute path of this directory in simulated OCI image, the path should
+                 end with a slash. All parent directories will be created if not exist.
+            """
+            assert path.startswith("/") and path.endswith("/")
+            tar_info = tarfile.TarInfo(path.removeprefix("/"))
+            tar_info.type = tarfile.DIRTYPE
+            self.tar_file.addfile(tar_info)
+            return self
+
+        def build(self) -> "OCIImageMock":
+            """Create the :class:`OCIImageMock` instance."""
+            self.tar_file.close()
+            return OCIImageMock(self.tar_file_obj.getvalue())
+
+    def __init__(self, files_tar: bytes):
+        """Initialize the OCIImageMock instance.
+
+        Args:
+            files_tar: files_tar is an uncompressed tar file in bytes. Every file and directory
+                inside the tar file represents a file or directory inside the mock OCI image.
+        """
+        # pylint: disable=consider-using-with
+        self.files_tar = tarfile.TarFile(mode="r", fileobj=io.BytesIO(files_tar))
+
+    def extract_to(self, path: str):
+        """Extract the content (files and directories) of the simulated OCI image to a directory.
+
+        Args:
+            path: path to the output directory.
+        """
+        self.files_tar.extractall(path)
+
+    @classmethod
+    def builder(cls) -> "OCIImageMock.OCIImageMockBuilder":
+        """Create a build to help creating a :class:`OCIImageMock` instance."""
+        return cls.OCIImageMockBuilder()
+
+
 class ContainerFileSystemMock:
     """Mock class for container file subsystem."""
 
-    def __init__(self):
-        """Initialize the :class:`ContainerFileSystemMock` instance."""
+    def __init__(self, image: OCIImageMock):
+        """Initialize the :class:`ContainerFileSystemMock` instance.
+
+        Args:
+            image: The mocking OCI image for this container.
+        """
         self.tempdir = tempfile.TemporaryDirectory()  # pylint: disable=consider-using-with
         self.tempdir_path = pathlib.Path(self.tempdir.name)
+        image.extract_to(self.tempdir.name)
 
     def _path_convert(self, path: str) -> pathlib.Path:
         """Convert an absolute path to a path in the temporary directory, like chroot."""
@@ -57,14 +131,15 @@ class ContainerFileSystemMock:
 class ContainerMock:
     """Mock class for :class:`ops.model.Container`."""
 
-    def __init__(self, original_container: ops.model.Container):
+    def __init__(self, original_container: ops.model.Container, image: OCIImageMock):
         """Initialize the :class:`ContainerMock` instance.
 
         Args:
             original_container: The original :class:`ops.model.Container` object, any method that's
                 not patched is passed to the original object.
+            image: The mocking OCI image for this container.
         """
-        self.file_system_mock = ContainerFileSystemMock()
+        self.file_system_mock = ContainerFileSystemMock(image=image)
         self._original_container = original_container
 
     def push(self, path: str, source: bytes):
@@ -98,6 +173,7 @@ class SpringBootPatch:
     def __init__(self):
         """Initialize the :class:`SpringBootPatch` instance."""
         self.container_mocks = {}
+        self.images = {}
         self._patch = patch.multiple(
             ops.model.Unit,
             get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
@@ -113,15 +189,20 @@ class SpringBootPatch:
             if container_name in self.container_mocks:
                 return self.container_mocks[container_name]
             original_container = original_get_container(_self, container_name)
-            container_mock = ContainerMock(original_container)
+            container_mock = ContainerMock(original_container, self.images[container_name])
             self.container_mocks[container_name] = container_mock
             return container_mock
 
         return _get_container_mock
 
-    def start(self):
-        """Start the patch system."""
+    def start(self, images: typing.Dict[str, OCIImageMock]):
+        """Start the patch system.
+
+        Args:
+            images: Mapping from container name to simulated OCI image.
+        """
         self.started = True
+        self.images = images
         self._patch.start()
 
     def stop(self):
