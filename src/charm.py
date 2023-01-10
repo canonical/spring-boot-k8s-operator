@@ -12,7 +12,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 from exceptions import ReconciliationError
-from java_application import ExecutableJarApplication
+from java_application import BuildpackApplication, ExecutableJarApplication
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
 
-    def _detect_java_application(self) -> ExecutableJarApplication:
+    def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
 
         Returns:
@@ -44,6 +44,10 @@ class SpringBootCharm(CharmBase):
                 )
             jar_file = jar_files[0]
             return ExecutableJarApplication(executable_jar_path=f"/app/{jar_file}")
+        if container.exists(
+            "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
+        ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
+            return BuildpackApplication()
         raise ReconciliationError(new_status=BlockedStatus("Unknown Java application type"))
 
     def _spring_boot_container(self) -> ops.model.Container:
@@ -61,12 +65,7 @@ class SpringBootCharm(CharmBase):
             Spring Boot service layer configuration, in the form of a dict
         """
         java_app = self._detect_java_application()
-        if isinstance(java_app, ExecutableJarApplication):
-            command = f'java -jar "{java_app.executable_jar_path}"'
-        else:
-            RuntimeError(
-                "Unexpected Java application type returned from Java application type detection"
-            )
+        command = java_app.command()
         return {
             "services": {
                 "spring-boot-app": {

@@ -123,9 +123,13 @@ class ContainerFileSystemMock:
             file_list.append(file_info)
         return file_list
 
-    def isdir(self, path: str):
+    def isdir(self, path: str) -> bool:
         """Mock function for :meth:`ops.model.Container.isdir`."""
         return self._path_convert(path).is_dir()
+
+    def exists(self, path: str) -> bool:
+        """Mock function for :meth:`ops.model.Container.exists`."""
+        return self._path_convert(path).exists()
 
 
 class ContainerMock:
@@ -153,6 +157,10 @@ class ContainerMock:
     def isdir(self, path: str):
         """Mock function for :meth:`ops.model.Container.isdir`."""
         return self.file_system_mock.isdir(path)
+
+    def exists(self, path: str) -> bool:
+        """Mock function for :meth:`ops.model.Container.exists`."""
+        return self.file_system_mock.exists(path)
 
     def can_connect(self):
         """Mock function for :meth:`ops.model.Container.can_connect`."""
