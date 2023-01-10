@@ -41,4 +41,4 @@ copyright-regexp = "Copyright\\s\\d{4}([-,]\\d{4})*\\s+%(author)s"
 exclude_dirs = ["/venv/"]
 
 [tool.bandit.assert_used]
-skips = ["*/*test.py", "*/test_*.py"]
+skips = ["*/*test.py", "*/test_*.py", "*/*_patch.py"]
