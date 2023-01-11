@@ -17,7 +17,7 @@ class ReconciliationError(Exception):
 
         Args:
             new_status: the unit status after the reconciliation process terminated.
-            defer_event: if true, defer the event that causing the reconciliation error and retry
+            defer_event: if true, defer the event that triggers the reconciliation error and retry
                 the reconciliation process later.
         """
         self.new_status = new_status

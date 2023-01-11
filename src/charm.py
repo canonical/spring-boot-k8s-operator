@@ -21,7 +21,11 @@ class SpringBootCharm(CharmBase):
     """Spring Boot Charm service."""
 
     def __init__(self, *args):
-        """Initialize the instance."""
+        """Initialize the instance.
+
+        Args:
+            args: passthrough to CharmBase.
+        """
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
 
@@ -31,6 +35,11 @@ class SpringBootCharm(CharmBase):
         Returns:
             One of the subclasses of :class:`java_application.JavaApplicationBase` represents
             one Java application type.
+
+        Raises:
+            ReconciliationError: unrecoverable errors happen during the Java application type
+                detection process, requiring the main reconciliation process to terminate the
+                reconciliation early.
         """
         container = self._spring_boot_container()
         if container.isdir("/app"):
@@ -62,7 +71,7 @@ class SpringBootCharm(CharmBase):
         """Generate Spring Boot service layer for pebble.
 
         Returns:
-            Spring Boot service layer configuration, in the form of a dict
+            Spring Boot service layer configuration, in the form of a dict.
         """
         java_app = self._detect_java_application()
         command = java_app.command()
@@ -84,7 +93,14 @@ class SpringBootCharm(CharmBase):
             },
         }
 
-    def _service_reconciliation(self):
+    def _service_reconciliation(self) -> None:
+        """Run the reconciliation process for pebble services.
+
+        Raises:
+            ReconciliationError: unrecoverable errors happen during the Java application type
+                detection process, requiring the main reconciliation process to terminate the
+                reconciliation early.
+        """
         container = self._spring_boot_container()
         if not container.can_connect():
             raise ReconciliationError(
@@ -93,8 +109,12 @@ class SpringBootCharm(CharmBase):
         container.add_layer("spring-boot-app", self._generate_spring_boot_layer(), combine=True)
         container.replan()
 
-    def reconciliation(self, event: EventBase):
-        """Run the main reconciliation process of Spring Boot charm."""
+    def reconciliation(self, event: EventBase) -> None:
+        """Run the main reconciliation process of Spring Boot charm.
+
+        Args:
+            event: the charm event that triggers the reconciliation.
+        """
         try:
             self.unit.status = MaintenanceStatus("Start reconciliation process")
             self._service_reconciliation()

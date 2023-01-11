@@ -191,7 +191,7 @@ class SpringBootPatch:
     def _gen_get_container_mock(
         self, original_get_container: typing.Callable[[ops.model.Unit, str], ops.model.Container]
     ):
-        """Create a mock function for :meth:`ops.model.Unit.get_container`"""
+        """Create a mock function for :meth:`ops.model.Unit.get_container`."""
 
         def _get_container_mock(_self, container_name: str):
             if container_name in self.container_mocks:
