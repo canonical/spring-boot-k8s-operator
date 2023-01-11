@@ -5,6 +5,7 @@
 """Spring Boot Charm service."""
 
 import logging
+import typing
 
 import ops.charm
 from ops.charm import CharmBase, EventBase
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 class SpringBootCharm(CharmBase):
     """Spring Boot Charm service."""
 
-    def __init__(self, *args):
+    def __init__(self, *args: typing.Any) -> None:
         """Initialize the instance.
 
         Args:

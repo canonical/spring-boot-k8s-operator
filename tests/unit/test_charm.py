@@ -4,14 +4,17 @@
 # pylint: disable=duplicate-code,protected-access
 
 """Spring Boot charm unit tests."""
+import typing
+
 import ops.charm
 import pytest
-from unit.spring_boot_patch import OCIImageMock
+from ops.testing import Harness
+from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 
 import exceptions
 
 
-def test_sprint_boot_pebble_layer(harness, patch):
+def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
@@ -55,7 +58,9 @@ def test_sprint_boot_pebble_layer(harness, patch):
         ([], "Unknown Java application type"),
     ],
 )
-def test_incorrect_app_directory_content(harness, patch, filenames, message):
+def test_incorrect_app_directory_content(
+    harness: Harness, patch: SpringBootPatch, filenames: typing.Sequence[str], message: str
+) -> None:
     """
     arrange: put incorrect files in the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
@@ -75,7 +80,7 @@ def test_incorrect_app_directory_content(harness, patch, filenames, message):
     assert exception_info.value.new_status.message == message
 
 
-def test_executable_jar_application_start(harness, patch):
+def test_executable_jar_application_start(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: start the charm.
@@ -94,7 +99,7 @@ def test_executable_jar_application_start(harness, patch):
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
 
 
-def test_buildpack_application_start(harness, patch):
+def test_buildpack_application_start(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
         buildpack.
@@ -114,7 +119,7 @@ def test_buildpack_application_start(harness, patch):
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
 
 
-def test_java_application_type_detection_failure(harness, patch):
+def test_java_application_type_detection_failure(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: prepare the simulated Spring Boot application container without any file.
     act: start the charm.

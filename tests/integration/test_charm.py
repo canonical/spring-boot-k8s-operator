@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.mark.abort_on_fail
-async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list):
+async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
     """
     arrange: none.
     act: build the Spring Boot charm and deploy it.

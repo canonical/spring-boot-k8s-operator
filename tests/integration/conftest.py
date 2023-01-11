@@ -9,7 +9,9 @@ import pytest_operator.plugin
 
 
 @pytest_asyncio.fixture(scope="module", name="get_unit_ip_list")
-async def get_unit_ip_list_fixture(ops_test: pytest_operator.plugin.OpsTest):
+async def get_unit_ip_list_fixture(
+    ops_test: pytest_operator.plugin.OpsTest,
+):
     """Helper function to retrieve unit ip addresses."""
 
     async def _get_unit_ip_list(app_name: str) -> typing.List[str]:

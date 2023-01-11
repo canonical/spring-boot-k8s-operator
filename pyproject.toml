@@ -46,3 +46,11 @@ exclude_dirs = ["/venv/"]
 
 [tool.bandit.assert_used]
 skips = ["*/*test.py", "*/test_*.py", "*/*_patch.py"]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "unit.*,integration.*"
+disallow_untyped_defs = false

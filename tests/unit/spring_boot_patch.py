@@ -19,7 +19,7 @@ class OCIImageMock:
     class OCIImageMockBuilder:
         """Helper class to create a :class:`OCIImageMock` instance."""
 
-        def __init__(self):
+        def __init__(self) -> None:
             """Initialize the :class:`OCIImageMockBuilder` instance."""
             self.tar_file_obj = io.BytesIO()
             # pylint: disable=consider-using-with
@@ -67,7 +67,7 @@ class OCIImageMock:
         # pylint: disable=consider-using-with
         self.files_tar = tarfile.TarFile(mode="r", fileobj=io.BytesIO(files_tar))
 
-    def extract_to(self, path: str):
+    def extract_to(self, path: str) -> None:
         """Extract the content (files and directories) of the simulated OCI image to a directory.
 
         Args:
@@ -98,13 +98,13 @@ class ContainerFileSystemMock:
         """Convert an absolute path to a path in the temporary directory, like chroot."""
         return self.tempdir_path / path.removeprefix("/")
 
-    def push(self, path: str, source: bytes):
+    def push(self, path: str, source: bytes) -> None:
         """Mock function for :meth:`ops.model.Container.push`."""
         converted_path = self._path_convert(path)
         converted_path.parent.mkdir(exist_ok=True)
         converted_path.write_bytes(source)
 
-    def list_files(self, path: str):
+    def list_files(self, path: str) -> typing.List[MagicMock]:
         """Mock function for :meth:`ops.model.Container.list_files`."""
         converted_path = self._path_convert(path)
         file_list = []
@@ -146,15 +146,15 @@ class ContainerMock:
         self.file_system_mock = ContainerFileSystemMock(image=image)
         self._original_container = original_container
 
-    def push(self, path: str, source: bytes):
+    def push(self, path: str, source: bytes) -> None:
         """Mock function for :meth:`ops.model.Container.push`."""
         return self.file_system_mock.push(path=path, source=source)
 
-    def list_files(self, path: str):
+    def list_files(self, path: str) -> typing.List[MagicMock]:
         """Mock function for :meth:`ops.model.Container.list_files`."""
         return self.file_system_mock.list_files(path)
 
-    def isdir(self, path: str):
+    def isdir(self, path: str) -> bool:
         """Mock function for :meth:`ops.model.Container.isdir`."""
         return self.file_system_mock.isdir(path)
 
@@ -162,15 +162,15 @@ class ContainerMock:
         """Mock function for :meth:`ops.model.Container.exists`."""
         return self.file_system_mock.exists(path)
 
-    def can_connect(self):
+    def can_connect(self) -> bool:
         """Mock function for :meth:`ops.model.Container.can_connect`."""
         return self._original_container.can_connect()
 
-    def add_layer(self, *args, **kwargs):
+    def add_layer(self, *args: typing.Any, **kwargs: typing.Any) -> None:
         """Mock function for :meth:`ops.model.Container.add_layer`."""
         return self._original_container.add_layer(*args, **kwargs)
 
-    def replan(self):
+    def replan(self) -> None:
         """Mock function for :meth:`ops.model.Container.replan`."""
         return self._original_container.replan()
 
@@ -178,10 +178,10 @@ class ContainerMock:
 class SpringBootPatch:
     """The overall patch system for Spring Boot charm unit tests."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the :class:`SpringBootPatch` instance."""
-        self.container_mocks = {}
-        self.images = {}
+        self.container_mocks: typing.Dict[str, ContainerMock] = {}
+        self.images: typing.Dict[str, OCIImageMock] = {}
         self._patch = patch.multiple(
             ops.model.Unit,
             get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
@@ -190,10 +190,10 @@ class SpringBootPatch:
 
     def _gen_get_container_mock(
         self, original_get_container: typing.Callable[[ops.model.Unit, str], ops.model.Container]
-    ):
+    ) -> typing.Callable[[ops.model.Unit, str], ContainerMock]:
         """Create a mock function for :meth:`ops.model.Unit.get_container`."""
 
-        def _get_container_mock(_self, container_name: str):
+        def _get_container_mock(_self: ops.model.Unit, container_name: str) -> ContainerMock:
             if container_name in self.container_mocks:
                 return self.container_mocks[container_name]
             original_container = original_get_container(_self, container_name)
@@ -203,7 +203,7 @@ class SpringBootPatch:
 
         return _get_container_mock
 
-    def start(self, images: typing.Dict[str, OCIImageMock]):
+    def start(self, images: typing.Dict[str, OCIImageMock]) -> None:
         """Start the patch system.
 
         Args:
@@ -213,7 +213,7 @@ class SpringBootPatch:
         self.images = images
         self._patch.start()
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the patch system."""
         self.started = False
         self._patch.stop()
