@@ -42,6 +42,10 @@ class SpringBootCharm(CharmBase):
                 reconciliation early.
         """
         container = self._spring_boot_container()
+        if container.exists(
+            "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
+        ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
+            return BuildpackApplication()
         if container.isdir("/app"):
             files_in_app = container.list_files("/app")
             jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
@@ -53,10 +57,6 @@ class SpringBootCharm(CharmBase):
                 )
             jar_file = jar_files[0]
             return ExecutableJarApplication(executable_jar_path=f"/app/{jar_file}")
-        if container.exists(
-            "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
-        ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
-            return BuildpackApplication()
         raise ReconciliationError(new_status=BlockedStatus("Unknown Java application type"))
 
     def _spring_boot_container(self) -> ops.model.Container:
