@@ -60,7 +60,6 @@ class BuildpackApplication(JavaApplicationBase):
             the pebble command to start the Java application.
         """
         return (
-            f"{self.java_executable_path} "
-            f'-cp "{self.class_path}" '
-            f"org.springframework.boot.loader.JarLauncher"
+            f'{self.java_executable_path} -cp "{self.class_path}" '
+            "org.springframework.boot.loader.JarLauncher"
         )
