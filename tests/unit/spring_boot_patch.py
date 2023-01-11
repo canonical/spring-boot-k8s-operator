@@ -44,7 +44,7 @@ class OCIImageMock:
 
             Args:
                 path: the absolute path of this directory in simulated OCI image, the path should
-                 end with a slash. All parent directories will be created if not exist.
+                    end with a slash. All parent directories will be created if not exist.
             """
             assert path.startswith("/") and path.endswith("/")
             tar_info = tarfile.TarInfo(path.removeprefix("/"))
