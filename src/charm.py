@@ -5,6 +5,7 @@
 """Spring Boot Charm service."""
 
 import logging
+import typing
 
 import ops.charm
 from ops.charm import CharmBase, EventBase
@@ -12,7 +13,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 
 from exceptions import ReconciliationError
-from java_application import ExecutableJarApplication
+from java_application import BuildpackApplication, ExecutableJarApplication
 
 logger = logging.getLogger(__name__)
 
@@ -20,19 +21,32 @@ logger = logging.getLogger(__name__)
 class SpringBootCharm(CharmBase):
     """Spring Boot Charm service."""
 
-    def __init__(self, *args):
-        """Initialize the instance."""
+    def __init__(self, *args: typing.Any) -> None:
+        """Initialize the instance.
+
+        Args:
+            args: passthrough to CharmBase.
+        """
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
 
-    def _detect_java_application(self) -> ExecutableJarApplication:
+    def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
 
         Returns:
             One of the subclasses of :class:`java_application.JavaApplicationBase` represents
             one Java application type.
+
+        Raises:
+            ReconciliationError: unrecoverable errors happen during the Java application type
+                detection process, requiring the main reconciliation process to terminate the
+                reconciliation early.
         """
         container = self._spring_boot_container()
+        if container.exists(
+            "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
+        ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
+            return BuildpackApplication()
         if container.isdir("/app"):
             files_in_app = container.list_files("/app")
             jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
@@ -58,15 +72,10 @@ class SpringBootCharm(CharmBase):
         """Generate Spring Boot service layer for pebble.
 
         Returns:
-            Spring Boot service layer configuration, in the form of a dict
+            Spring Boot service layer configuration, in the form of a dict.
         """
         java_app = self._detect_java_application()
-        if isinstance(java_app, ExecutableJarApplication):
-            command = f'java -jar "{java_app.executable_jar_path}"'
-        else:
-            RuntimeError(
-                "Unexpected Java application type returned from Java application type detection"
-            )
+        command = java_app.command()
         return {
             "services": {
                 "spring-boot-app": {
@@ -85,7 +94,14 @@ class SpringBootCharm(CharmBase):
             },
         }
 
-    def _service_reconciliation(self):
+    def _service_reconciliation(self) -> None:
+        """Run the reconciliation process for pebble services.
+
+        Raises:
+            ReconciliationError: unrecoverable errors happen during the Java application type
+                detection process, requiring the main reconciliation process to terminate the
+                reconciliation early.
+        """
         container = self._spring_boot_container()
         if not container.can_connect():
             raise ReconciliationError(
@@ -94,8 +110,12 @@ class SpringBootCharm(CharmBase):
         container.add_layer("spring-boot-app", self._generate_spring_boot_layer(), combine=True)
         container.replan()
 
-    def reconciliation(self, event: EventBase):
-        """Run the main reconciliation process of Spring Boot charm."""
+    def reconciliation(self, event: EventBase) -> None:
+        """Run the main reconciliation process of Spring Boot charm.
+
+        Args:
+            event: the charm event that triggers the reconciliation.
+        """
         try:
             self.unit.status = MaintenanceStatus("Start reconciliation process")
             self._service_reconciliation()

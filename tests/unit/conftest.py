@@ -26,7 +26,7 @@ def harness_fixture():
 
 
 @pytest.fixture(name="patch")
-def patch_fixture(harness):
+def patch_fixture(harness: ops.testing.Harness):
     """Patch system for unit tests."""
     patch = SpringBootPatch()
 

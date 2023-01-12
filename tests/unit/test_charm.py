@@ -4,22 +4,31 @@
 # pylint: disable=duplicate-code,protected-access
 
 """Spring Boot charm unit tests."""
+import typing
+
 import ops.charm
 import pytest
+from ops.testing import Harness
+from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 
 import exceptions
 
 
-def test_sprint_boot_pebble_layer(harness, patch):
+def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
     assert: Spring Boot charm should generate a valid layer configuration.
     """
+    patch.start(
+        {
+            "spring-boot-app": OCIImageMock.builder()
+            .add_file("/app/test.jar", b"")
+            .add_file("/app/data.json", b"")
+            .build()
+        }
+    )
     harness.begin()
-    patch.start()
-    harness.charm.unit.get_container("spring-boot-app").push("/app/test.jar", source=b"")
-    harness.charm.unit.get_container("spring-boot-app").push("/app/data.json", source=b"")
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     spring_boot_layer = harness.charm._generate_spring_boot_layer()
     assert spring_boot_layer == {
@@ -44,50 +53,79 @@ def test_sprint_boot_pebble_layer(harness, patch):
 @pytest.mark.parametrize(
     "filenames,message",
     [
-        (["/app/test.jar", "/app/second.jar"], "multiple jar files exist in /app"),
-        (["/app/test.json"], "no jar file exists in /app"),
-        ([], "no jar file exists in /app"),
+        (["/app/test.jar", "/app/second.jar"], "Multiple jar files found in /app"),
+        (["/app/test.json"], "No jar file found in /app"),
+        ([], "Unknown Java application type"),
     ],
 )
-def test_incorrect_app_directory_content(harness, patch, filenames, message):
+def test_incorrect_app_directory_content(
+    harness: Harness, patch: SpringBootPatch, filenames: typing.Sequence[str], message: str
+) -> None:
     """
     arrange: put incorrect files in the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
     assert: Spring Boot charm should raise ReconciliationError with different reasons accordingly.
     """
+    image_mock_builder = OCIImageMock.builder()
+    for file in filenames:
+        image_mock_builder.add_file(file, b"")
+
+    patch.start({"spring-boot-app": image_mock_builder.build()})
     harness.begin()
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
-    patch.start()
     for filename in filenames:
         harness.charm.unit.get_container("spring-boot-app").push(filename, source=b"")
     with pytest.raises(exceptions.ReconciliationError) as exception_info:
         harness.charm._generate_spring_boot_layer()
-        assert exception_info.value.args[0].message == message
+    assert exception_info.value.new_status.message == message
 
 
-def test_charm_start(harness, patch):
+def test_executable_jar_application_start(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
-    act: trigger a config-changed event.
+    act: start the charm.
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
-    harness.begin()
-    patch.start()
+    patch.start(
+        {
+            "spring-boot-app": OCIImageMock.builder()
+            .add_file("/app/test.jar", b"")
+            .add_file("/app/data.json", b"")
+            .build()
+        }
+    )
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
-    harness.charm.unit.get_container("spring-boot-app").push("/app/test.jar", source=b"")
-    harness.charm.unit.get_container("spring-boot-app").push("/app/data.json", source=b"")
-    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
-    harness.update_config({})
+    harness.begin_with_initial_hooks()
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
 
 
-def test_java_application_type_detection_failure(harness, patch):
+def test_buildpack_application_start(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
+        buildpack.
+    act: start the charm.
+    assert: Spring Boot charm should finish the reconciliation process without an error.
+    """
+    patch.start(
+        {
+            "spring-boot-app": OCIImageMock.builder()
+            .add_file("/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java", b"")
+            .add_file("/workspace/org/springframework/boot/loader/JarLauncher.class", b"")
+            .build()
+        }
+    )
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.begin_with_initial_hooks()
+    assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
+
+
+def test_java_application_type_detection_failure(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: prepare the simulated Spring Boot application container without any file.
     act: start the charm.
     assert: Spring Boot charm should be in blocking status.
     """
-    patch.start()
+    patch.start({"spring-boot-app": OCIImageMock.builder().build()})
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     harness.begin_with_initial_hooks()
     assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
