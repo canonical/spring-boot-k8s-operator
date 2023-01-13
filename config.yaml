@@ -1,1 +1,5 @@
-options: {}
+options:
+  application-config:
+    type: string
+    description: Spring Boot configuration properties in JSON format.
+    default: ""

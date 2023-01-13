@@ -4,6 +4,7 @@
 
 """Spring Boot Charm service."""
 
+import json
 import logging
 import typing
 
@@ -29,6 +30,60 @@ class SpringBootCharm(CharmBase):
         """
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
+
+    def _application_config(self) -> dict | None:
+        """Decode the value of the charm configuration application-config.
+
+        Returns:
+            The value of the charm configuration application-config.
+
+        Raises:
+            ReconciliationError: when application-config is invalid.
+        """
+        try:
+            config = self.model.config["application-config"]
+            if not config:
+                return None
+            application_config = json.loads(config)
+            if isinstance(application_config, dict):
+                return application_config
+            raise ReconciliationError(
+                new_status=BlockedStatus(
+                    "Invalid application-config value, expecting an object in JSON"
+                )
+            )
+        except json.JSONDecodeError as exc:
+            raise ReconciliationError(
+                new_status=BlockedStatus("Invalid application-config value, expecting JSON")
+            ) from exc
+
+    def _spring_boot_port(self) -> int:
+        """Get Spring Boot server port.
+
+        Returns:
+            Sprint Boot server port.
+        """
+        application_config = self._application_config()
+        if (
+            application_config
+            and "server" in application_config
+            and isinstance(application_config["server"], dict)
+            and application_config["server"]["port"]
+        ):
+            return application_config["server"]["port"]
+        return 8080
+
+    def _sprint_boot_env(self) -> typing.Dict[str, str]:
+        """Generate environment variables for the Spring Boot application process.
+
+        Returns:
+            Environment variables for the Spring Boot application.
+        """
+        env = {}
+        application_config = self._application_config()
+        if application_config:
+            env["SPRING_APPLICATION_JSON"] = json.dumps(self._application_config())
+        return env
 
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
@@ -81,6 +136,7 @@ class SpringBootCharm(CharmBase):
                 "spring-boot-app": {
                     "override": "replace",
                     "summary": "Spring Boot application service",
+                    "environment": self._sprint_boot_env(),
                     "command": command,
                     "startup": "enabled",
                 }
@@ -89,7 +145,9 @@ class SpringBootCharm(CharmBase):
                 "wordpress-ready": {
                     "override": "replace",
                     "level": "alive",
-                    "http": {"url": "http://localhost:8080/actuator/health"},
+                    "http": {
+                        "url": f"http://localhost:{self._spring_boot_port()}/actuator/health"
+                    },
                 },
             },
         }
