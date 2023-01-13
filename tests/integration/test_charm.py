@@ -5,6 +5,7 @@
 """Integration tests for Spring Boot charm."""
 
 import asyncio
+import json
 import logging
 
 import pytest
@@ -12,6 +13,9 @@ import requests
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
+
+APP_NAME = "spring-boot-k8s"
+BUILDPACK_APP_NAME = f"{APP_NAME}-buildpack"
 
 
 @pytest.mark.abort_on_fail
@@ -27,21 +31,39 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
     executable_jar_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"}
     buildpack_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered"}
     # Deploy the charm and wait for idle
-    app_name = "spring-boot-k8s"
-    buildpack_app_name = f"{app_name}-buildpack"
     await asyncio.gather(
         ops_test.model.deploy(
-            charm, resources=executable_jar_resources, application_name=app_name, series="jammy"
+            charm, resources=executable_jar_resources, application_name=APP_NAME, series="jammy"
         ),
         ops_test.model.deploy(
             charm,
             resources=buildpack_resources,
-            application_name=buildpack_app_name,
+            application_name=BUILDPACK_APP_NAME,
             series="jammy",
         ),
-        ops_test.model.wait_for_idle(apps=[app_name, buildpack_app_name], status="active"),
+        ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )
-    for name in [app_name, buildpack_app_name]:
+    for name in [APP_NAME, BUILDPACK_APP_NAME]:
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
             assert requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5).status_code == 200
+
+
+@pytest.mark.abort_on_fail
+async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_list) -> None:
+    """
+    arrange: deploy Spring Boot applications.
+    act: Update the application-config with a different Spring Boot server port.
+    assert: Spring Boot applications should change the server port accordingly.
+    """
+    port_config = json.dumps({"server": {"port": 8888}})
+    await asyncio.gather(
+        ops_test.model.applications[APP_NAME].set_config({"application-config": port_config}),
+        ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
+            {"application-config": port_config}),
+        ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
+    )
+    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+        unit_ips = await get_unit_ip_list(name)
+        for unit_ip in unit_ips:
+            assert requests.get(f"http://{unit_ip}:8888/hello-world", timeout=5).status_code == 200
