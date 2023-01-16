@@ -56,14 +56,18 @@ async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_lis
     act: Update the application-config with a different Spring Boot server port.
     assert: Spring Boot applications should change the server port accordingly.
     """
-    port_config = json.dumps({"server": {"port": 8888}})
+    assert ops_test.model
+    app_config = json.dumps({"server": {"port": 8888}, "greeting": "Bonjour"})
     await asyncio.gather(
-        ops_test.model.applications[APP_NAME].set_config({"application-config": port_config}),
+        ops_test.model.applications[APP_NAME].set_config({"application-config": app_config}),
         ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
-            {"application-config": port_config}),
+            {"application-config": app_config}
+        ),
         ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )
     for name in [APP_NAME, BUILDPACK_APP_NAME]:
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
-            assert requests.get(f"http://{unit_ip}:8888/hello-world", timeout=5).status_code == 200
+            response = requests.get(f"http://{unit_ip}:8888/hello-world", timeout=5)
+            assert response.status_code == 200
+            assert "Bonjour" in response.text
