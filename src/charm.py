@@ -71,7 +71,11 @@ class SpringBootCharm(CharmBase):
             and isinstance(application_config["server"], dict)
             and application_config["server"]["port"]
         ):
-            return application_config["server"]["port"]
+            port = application_config["server"]["port"]
+            logger.debug(
+                "Port configuration detected in application-config, update server port to %s", port
+            )
+            return port
         return 8080
 
     def _sprint_boot_env(self) -> typing.Dict[str, str]:
