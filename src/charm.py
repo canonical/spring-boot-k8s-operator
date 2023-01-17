@@ -47,6 +47,7 @@ class SpringBootCharm(CharmBase):
             application_config = json.loads(config)
             if isinstance(application_config, dict):
                 return application_config
+            logger.error("Invalid application-config value: %s", repr(config))
             raise ReconciliationError(
                 new_status=BlockedStatus(
                     "Invalid application-config value, expecting an object in JSON"
@@ -108,6 +109,7 @@ class SpringBootCharm(CharmBase):
             if not jar_files:
                 raise ReconciliationError(new_status=BlockedStatus("No jar file found in /app"))
             if len(jar_files) > 1:
+                logger.error("Multiple jar files found in /app: %s", repr(jar_files))
                 raise ReconciliationError(
                     new_status=BlockedStatus("Multiple jar files found in /app")
                 )
@@ -175,9 +177,11 @@ class SpringBootCharm(CharmBase):
             event: the charm event that triggers the reconciliation.
         """
         try:
+            logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
+            logger.debug("Finish reconciliation, triggered by %s", event)
         except ReconciliationError as error:
             self.unit.status = error.new_status
             if error.defer_event:
