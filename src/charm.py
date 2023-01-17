@@ -63,6 +63,10 @@ class SpringBootCharm(CharmBase):
 
         Returns:
             Sprint Boot server port.
+
+        Raises:
+            ReconciliationError: server port is provided in application-config but the value is
+                invalid.
         """
         application_config = self._application_config()
         if (
@@ -72,6 +76,11 @@ class SpringBootCharm(CharmBase):
             and application_config["server"]["port"]
         ):
             port = application_config["server"]["port"]
+            if not isinstance(port, int) or port <= 0:
+                logger.error("Invalid server port configuration: %s", repr(port))
+                raise ReconciliationError(
+                    new_status=BlockedStatus("Invalid server port configuration")
+                )
             logger.debug(
                 "Port configuration detected in application-config, update server port to %s", port
             )
