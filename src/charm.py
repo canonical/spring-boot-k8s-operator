@@ -59,7 +59,7 @@ class SpringBootCharm(CharmBase):
             ) from exc
 
     def _spring_boot_port(self) -> int:
-        """Get Spring Boot server port.
+        """Get the Spring Boot application server port, default to 8080.
 
         Returns:
             Sprint Boot server port.
