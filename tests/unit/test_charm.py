@@ -63,7 +63,7 @@ def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> N
     ],
 )
 def test_incorrect_app_directory_content(
-        harness: Harness, patch: SpringBootPatch, filenames: typing.Sequence[str], message: str
+    harness: Harness, patch: SpringBootPatch, filenames: typing.Sequence[str], message: str
 ) -> None:
     """
     arrange: put incorrect files in the simulated Spring Boot application container.
@@ -175,7 +175,7 @@ def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
     ],
 )
 def test_invalid_application_config(
-        harness: Harness, patch: SpringBootPatch, config: str, message: str
+    harness: Harness, patch: SpringBootPatch, config: str, message: str
 ) -> None:
     """
     arrange: provide a simulated Spring Boot application image.
@@ -215,10 +215,10 @@ def test_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
     assert isinstance(status, ActiveStatus)
     container = harness.model.unit.containers["spring-boot-app"]
     assert (
-            container.get_plan().to_dict()["services"]["spring-boot-app"]["environment"][
-                "JAVA_TOOL_OPTIONS"
-            ]
-            == jvm_config
+        container.get_plan().to_dict()["services"]["spring-boot-app"]["environment"][
+            "JAVA_TOOL_OPTIONS"
+        ]
+        == jvm_config
     )
 
 
@@ -249,7 +249,7 @@ def test_invalid_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config
 
 
 @pytest.mark.parametrize(
-    "jvm_config,memory_constraint,ok",
+    "jvm_config,memory_constraint,okay",
     [
         ("-Xmx1G", None, True),
         ("-Xmx1G", "2Gi", True),
@@ -259,11 +259,11 @@ def test_invalid_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config
     ],
 )
 def test_jvm_heap_memory_config(
-        harness: Harness,
-        patch: SpringBootPatch,
-        jvm_config: str,
-        memory_constraint: typing.Optional[str],
-        ok: bool,
+    harness: Harness,
+    patch: SpringBootPatch,
+    jvm_config: str,
+    memory_constraint: typing.Optional[str],
+    okay: bool,
 ):
     """
     arrange: provide a simulated Spring Boot application image and set the container memory
@@ -286,8 +286,11 @@ def test_jvm_heap_memory_config(
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     harness.update_config({"jvm-config": jvm_config})
     status = harness.model.unit.status
-    if ok:
+    if okay:
         assert isinstance(status, ActiveStatus)
     else:
         assert isinstance(status, BlockedStatus)
-        assert status.message == "Invalid jvm-config, Java heap memory requirement exceeds application memory constraint"
+        assert status.message == (
+            "Invalid jvm-config, "
+            "Java heap memory requirement exceeds application memory constraint"
+        )

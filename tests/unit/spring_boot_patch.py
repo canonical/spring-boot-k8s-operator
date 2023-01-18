@@ -7,7 +7,7 @@ import pathlib
 import tarfile
 import tempfile
 import typing
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, _patch, patch
 
 import kubernetes.client
 import ops.model
@@ -235,13 +235,16 @@ class SpringBootPatch:
         """Initialize the :class:`SpringBootPatch` instance."""
         self.container_mocks: typing.Dict[str, ContainerMock] = {}
         self.images: typing.Dict[str, OCIImageMock] = {}
-        self._patch = patch.multiple(
-            ops.model.Unit,
-            get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
+        self._patches: typing.List[_patch] = []
+        self._patches.append(
+            patch.multiple(
+                ops.model.Unit,
+                get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
+            )
         )
-        self._kubernetes_client_patch = None
-        self._kubernetes_config_patch = None
-        self._container_mock_callback = {}
+        self._container_mock_callback: typing.Dict[
+            str, typing.Callable[[ContainerMock], typing.Any]
+        ] = {}
         self.started = False
 
     def _gen_get_container_mock(
@@ -267,7 +270,7 @@ class SpringBootPatch:
         container_mock_callback: typing.Optional[
             typing.Dict[str, typing.Callable[[ContainerMock], typing.Any]]
         ] = None,
-        memory_constraint: typing.Optional[typing.Dict[str, str]] = None,
+        memory_constraint: typing.Optional[str] = None,
     ) -> None:
         """Start the patch system.
 
@@ -282,9 +285,7 @@ class SpringBootPatch:
         self.images = images
         if container_mock_callback:
             self._container_mock_callback = container_mock_callback
-        self._kubernetes_config_patch = patch.multiple(
-            kubernetes.config, load_incluster_config=MagicMock()
-        )
+        self._patches.append(patch.multiple(kubernetes.config, load_incluster_config=MagicMock()))
         kubernetes_pod_mock = MagicMock()
         kubernetes_spec_mock = MagicMock()
         kubernetes_container_mock = MagicMock()
@@ -296,18 +297,20 @@ class SpringBootPatch:
         kubernetes_resources_mock.limits = (
             None if memory_constraint is None else {"memory": memory_constraint}
         )
-        self._kubernetes_client_patch = patch.multiple(
-            kubernetes.client.CoreV1Api,
-            read_namespaced_pod=MagicMock(return_value=kubernetes_pod_mock),
+        self._patches.append(
+            patch.multiple(
+                kubernetes.client.CoreV1Api,
+                read_namespaced_pod=MagicMock(return_value=kubernetes_pod_mock),
+            )
         )
-        self._patch.start()
-        self._kubernetes_config_patch.start()
-        self._kubernetes_client_patch.start()
+
+        for patch_ in self._patches:
+            patch_.start()
 
     def stop(self) -> None:
         """Stop the patch system."""
         self.started = False
         self._container_mock_callback = {}
-        self._patch.stop()
-        self._kubernetes_config_patch.stop()
-        self._kubernetes_client_patch.stop()
+        for patch_ in self._patches:
+            patch_.stop()
+        self._patches = []
