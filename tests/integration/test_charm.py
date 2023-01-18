@@ -84,6 +84,7 @@ async def test_application_config(ops_test: OpsTest, get_unit_ip_list) -> None:
     assert: Spring Boot example applications /hello-world endpoint should respond differently
         according to the configuration.
     """
+    assert ops_test.model
     app_config = json.dumps({"greeting": "Bonjour"})
     await asyncio.gather(
         ops_test.model.applications[APP_NAME].set_config({"application-config": app_config}),
