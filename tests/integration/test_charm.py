@@ -53,11 +53,38 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
 async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_list) -> None:
     """
     arrange: deploy Spring Boot applications.
-    act: Update the application-config with a different Spring Boot server port.
+    act: Update the application-config with a different Spring Boot server port then reset the
+        application-config configuration.
     assert: Spring Boot applications should change the server port accordingly.
     """
     assert ops_test.model
-    app_config = json.dumps({"server": {"port": 8888}, "greeting": "Bonjour"})
+    new_port = 8888
+    default_port = 8080
+    for port in (new_port, default_port):
+        app_config = json.dumps({"server": {"port": new_port}}) if port == new_port else ""
+        await asyncio.gather(
+            ops_test.model.applications[APP_NAME].set_config({"application-config": app_config}),
+            ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
+                {"application-config": app_config}
+            ),
+            ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
+        )
+        for name in [APP_NAME, BUILDPACK_APP_NAME]:
+            unit_ips = await get_unit_ip_list(name)
+            for unit_ip in unit_ips:
+                response = requests.get(f"http://{unit_ip}:{port}/hello-world", timeout=5)
+                assert response.status_code == 200
+
+
+@pytest.mark.abort_on_fail
+async def test_application_config(ops_test: OpsTest, get_unit_ip_list) -> None:
+    """
+    arrange: deploy Spring Boot applications.
+    act: Update the application-config with a different application layer configuration.
+    assert: Spring Boot example applications /hello-world endpoint should respond differently
+        according to the configuration.
+    """
+    app_config = json.dumps({"greeting": "Bonjour"})
     await asyncio.gather(
         ops_test.model.applications[APP_NAME].set_config({"application-config": app_config}),
         ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
@@ -68,6 +95,6 @@ async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_lis
     for name in [APP_NAME, BUILDPACK_APP_NAME]:
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
-            response = requests.get(f"http://{unit_ip}:8888/hello-world", timeout=5)
+            response = requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5)
             assert response.status_code == 200
             assert "Bonjour" in response.text
