@@ -61,7 +61,7 @@ async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_lis
     await asyncio.gather(
         ops_test.model.applications[APP_NAME].set_config({"application-config": app_config}),
         ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
-            {"application-config": app_config}
+            {"application-config": app_config, "jvm-config": "-Xmx1G"}
         ),
         ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )

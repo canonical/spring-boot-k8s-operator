@@ -186,7 +186,9 @@ class SpringBootCharm(CharmBase):
         command.insert(1, "--dry-run")
         exit_code, _, stderr = self._exec(command, environment={JAVA_TOOL_OPTIONS: config})
         if exit_code != 0:
-            logger.error("Invalid JVM configuration, error report from java: %s", stderr)
+            logger.error(
+                "Invalid JVM configuration, error report from java command %s: %s", command, stderr
+            )
             raise ReconciliationError(new_status=BlockedStatus("Invalid jvm-config"))
         return config
 
@@ -302,7 +304,14 @@ class SpringBootCharm(CharmBase):
         for container in spec.containers:
             if container.name != "spring-boot-app":
                 continue
-            return container.resources.limits.get("memory", 0)
+            limits = container.resources.limits
+            if limits is None:
+                return 0
+            memory_limit = container.resources.limits.get("memory")
+            if memory_limit is None:
+                return 0
+            return self._parse_human_readable_units(memory_limit.removesuffix("i"))
+
         raise RuntimeError("Container spring-boot-app does not exist")
 
     def _service_reconciliation(self) -> None:

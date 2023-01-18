@@ -34,7 +34,7 @@ class ExecutableJarApplication(JavaApplicationBase):
         Returns:
             the pebble command to start the Java application.
         """
-        return ["java", "-jar", '"{self.executable_jar_path}"']
+        return ["java", "-jar", self.executable_jar_path]
 
 
 class BuildpackApplication(JavaApplicationBase):
@@ -63,6 +63,6 @@ class BuildpackApplication(JavaApplicationBase):
         return [
             self.java_executable_path,
             "-cp",
-            f'"{self.class_path}"',
+            self.class_path,
             "org.springframework.boot.loader.JarLauncher",
         ]
