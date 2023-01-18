@@ -4,10 +4,13 @@
 # pylint: disable=duplicate-code,protected-access
 
 """Spring Boot charm unit tests."""
+import json
 import typing
 
 import ops.charm
+import ops.pebble
 import pytest
+from ops.model import BlockedStatus
 from ops.testing import Harness
 from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 
@@ -37,6 +40,7 @@ def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> N
                 "override": "replace",
                 "summary": "Spring Boot application service",
                 "command": 'java -jar "/app/test.jar"',
+                "environment": {},
                 "startup": "enabled",
             }
         },
@@ -129,3 +133,59 @@ def test_java_application_type_detection_failure(harness: Harness, patch: Spring
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     harness.begin_with_initial_hooks()
     assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
+
+
+def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update the application-config to update the Spring Boot server port.
+    assert: Spring Boot charm should use a pebble layer with correct environment and
+        healthcheck options.
+    """
+    patch.start({"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()})
+    harness.begin_with_initial_hooks()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.update_config({"application-config": json.dumps({"server": {"port": 8888}})})
+    assert harness.charm._generate_spring_boot_layer()["checks"] == {
+        "wordpress-ready": {
+            "override": "replace",
+            "level": "alive",
+            "http": {"url": "http://localhost:8888/actuator/health"},
+        },
+    }
+    container = harness.model.unit.containers["spring-boot-app"]
+    assert container.get_plan().to_dict() == {
+        "services": {
+            "spring-boot-app": {
+                "override": "replace",
+                "summary": "Spring Boot application service",
+                "environment": {"SPRING_APPLICATION_JSON": '{"server": {"port": 8888}}'},
+                "command": 'java -jar "/app/test.jar"',
+                "startup": "enabled",
+            }
+        }
+    }
+
+
+@pytest.mark.parametrize(
+    "config,message",
+    [
+        ("a", "Invalid application-config value, expecting JSON"),
+        ("1", "Invalid application-config value, expecting an object in JSON"),
+    ],
+)
+def test_invalid_application_config(
+    harness: Harness, patch: SpringBootPatch, config: str, message: str
+) -> None:
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update the application-config with am invalid value.
+    assert: Spring Boot charm should enter blocked status.
+    """
+    patch.start({"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()})
+    harness.begin_with_initial_hooks()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.update_config({"application-config": config})
+    status = harness.model.unit.status
+    assert isinstance(status, BlockedStatus)
+    assert status.message == message

@@ -4,6 +4,7 @@
 
 """Spring Boot Charm service."""
 
+import json
 import logging
 import typing
 
@@ -30,6 +31,74 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
 
+    def _application_config(self) -> dict | None:
+        """Decode the value of the charm configuration application-config.
+
+        Returns:
+            The value of the charm configuration application-config.
+
+        Raises:
+            ReconciliationError: when application-config is invalid.
+        """
+        try:
+            config = self.model.config["application-config"]
+            if not config:
+                return None
+            application_config = json.loads(config)
+            if isinstance(application_config, dict):
+                return application_config
+            logger.error("Invalid application-config value: %s", repr(config))
+            raise ReconciliationError(
+                new_status=BlockedStatus(
+                    "Invalid application-config value, expecting an object in JSON"
+                )
+            )
+        except json.JSONDecodeError as exc:
+            raise ReconciliationError(
+                new_status=BlockedStatus("Invalid application-config value, expecting JSON")
+            ) from exc
+
+    def _spring_boot_port(self) -> int:
+        """Get the Spring Boot application server port, default to 8080.
+
+        Returns:
+            Sprint Boot server port.
+
+        Raises:
+            ReconciliationError: server port is provided in application-config but the value is
+                invalid.
+        """
+        application_config = self._application_config()
+        if (
+            application_config
+            and "server" in application_config
+            and isinstance(application_config["server"], dict)
+            and application_config["server"]["port"]
+        ):
+            port = application_config["server"]["port"]
+            if not isinstance(port, int) or port <= 0:
+                logger.error("Invalid server port configuration: %s", repr(port))
+                raise ReconciliationError(
+                    new_status=BlockedStatus("Invalid server port configuration")
+                )
+            logger.debug(
+                "Port configuration detected in application-config, update server port to %s", port
+            )
+            return port
+        return 8080
+
+    def _sprint_boot_env(self) -> typing.Dict[str, str]:
+        """Generate environment variables for the Spring Boot application process.
+
+        Returns:
+            Environment variables for the Spring Boot application.
+        """
+        env = {}
+        application_config = self._application_config()
+        if application_config:
+            env["SPRING_APPLICATION_JSON"] = json.dumps(self._application_config())
+        return env
+
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
 
@@ -53,6 +122,7 @@ class SpringBootCharm(CharmBase):
             if not jar_files:
                 raise ReconciliationError(new_status=BlockedStatus("No jar file found in /app"))
             if len(jar_files) > 1:
+                logger.error("Multiple jar files found in /app: %s", repr(jar_files))
                 raise ReconciliationError(
                     new_status=BlockedStatus("Multiple jar files found in /app")
                 )
@@ -81,6 +151,7 @@ class SpringBootCharm(CharmBase):
                 "spring-boot-app": {
                     "override": "replace",
                     "summary": "Spring Boot application service",
+                    "environment": self._sprint_boot_env(),
                     "command": command,
                     "startup": "enabled",
                 }
@@ -89,7 +160,9 @@ class SpringBootCharm(CharmBase):
                 "wordpress-ready": {
                     "override": "replace",
                     "level": "alive",
-                    "http": {"url": "http://localhost:8080/actuator/health"},
+                    "http": {
+                        "url": f"http://localhost:{self._spring_boot_port()}/actuator/health"
+                    },
                 },
             },
         }
@@ -117,9 +190,11 @@ class SpringBootCharm(CharmBase):
             event: the charm event that triggers the reconciliation.
         """
         try:
+            logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
+            logger.debug("Finish reconciliation, triggered by %s", event)
         except ReconciliationError as error:
             self.unit.status = error.new_status
             if error.defer_event:
