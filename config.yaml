@@ -3,3 +3,7 @@ options:
     type: string
     description: Spring Boot configuration properties in JSON format.
     default: ""
+  jvm-config:
+    type: string
+    description: JVM configuration that will be passed to JAVA_TOOL_OPTIONS environment variable.
+    default: ""
