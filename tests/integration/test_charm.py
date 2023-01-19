@@ -32,10 +32,10 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
     executable_jar_resources = {
-        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0@sha256:abbefdcedbb196a5744fb1c61f3d3fc166ea4b0eb46e5c6321fc7d7cdb73470c"
+        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"
     }
     buildpack_resources = {
-        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered@sha256:e69f8bdf8672bbb7aa6abfba15ce2540ec29d7ebd25167018f46a51da26fce77"
+        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered"
     }
     # Deploy the charm and wait for idle
     await asyncio.gather(
