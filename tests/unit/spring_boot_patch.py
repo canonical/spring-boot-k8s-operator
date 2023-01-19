@@ -289,10 +289,15 @@ class SpringBootPatch:
         kubernetes_pod_mock = MagicMock()
         kubernetes_spec_mock = MagicMock()
         kubernetes_container_mock = MagicMock()
+        kubernetes_charm_container_mock = MagicMock()
         kubernetes_resources_mock = MagicMock()
         kubernetes_pod_mock.spec = kubernetes_spec_mock
-        kubernetes_spec_mock.containers = [kubernetes_container_mock]
+        kubernetes_spec_mock.containers = [
+            kubernetes_charm_container_mock,
+            kubernetes_container_mock,
+        ]
         kubernetes_container_mock.name = "spring-boot-app"
+        kubernetes_charm_container_mock.name = "charm"
         kubernetes_container_mock.resources = kubernetes_resources_mock
         kubernetes_resources_mock.limits = (
             None if memory_constraint is None else {"memory": memory_constraint}
