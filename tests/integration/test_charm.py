@@ -43,7 +43,7 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
             resources=executable_jar_resources,
             application_name=MEM_1G_APP_NAME,
             series="jammy",
-            constraints={"mem": 1024},  # memory constraint unit is MiB
+            constraints={"mem": 512},  # memory constraint unit is MiB
         ),
         ops_test.model.deploy(
             charm,
@@ -56,7 +56,7 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
             resources=buildpack_resources,
             application_name=MEM_1G_BUILDPACK_APP_NAME,
             series="jammy",
-            constraints={"mem": 1024},
+            constraints={"mem": 512},
         ),
         ops_test.model.wait_for_idle(
             apps=ALL_APP_NAMES,
