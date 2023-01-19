@@ -1,7 +1,9 @@
 options:
   application-config:
     type: string
-    description: Spring Boot configuration properties in JSON format.
+    description: >
+      Spring Boot configuration properties in JSON format, it will be passed to 
+      the Spring Boot application as SPRING_APPLICATION_JSON environment variable.
     default: ""
   jvm-config:
     type: string

@@ -10,7 +10,7 @@ import typing
 import ops.charm
 import ops.pebble
 import pytest
-from ops.model import ActiveStatus, BlockedStatus
+from ops.model import BlockedStatus
 from ops.testing import Harness
 from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 
@@ -39,7 +39,7 @@ def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> N
             "spring-boot-app": {
                 "override": "replace",
                 "summary": "Spring Boot application service",
-                "command": "java -jar /app/test.jar",
+                "command": 'java -jar "/app/test.jar"',
                 "environment": {},
                 "startup": "enabled",
             }
@@ -160,7 +160,7 @@ def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
                 "override": "replace",
                 "summary": "Spring Boot application service",
                 "environment": {"SPRING_APPLICATION_JSON": '{"server": {"port": 8888}}'},
-                "command": "java -jar /app/test.jar",
+                "command": 'java -jar "/app/test.jar"',
                 "startup": "enabled",
             }
         }
