@@ -10,7 +10,7 @@ import typing
 import ops.charm
 import ops.pebble
 import pytest
-from ops.model import BlockedStatus
+from ops.model import ActiveStatus, BlockedStatus
 from ops.testing import Harness
 from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 
@@ -39,7 +39,7 @@ def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> N
             "spring-boot-app": {
                 "override": "replace",
                 "summary": "Spring Boot application service",
-                "command": 'java -jar "/app/test.jar"',
+                "command": "java -jar /app/test.jar",
                 "environment": {},
                 "startup": "enabled",
             }
@@ -160,7 +160,7 @@ def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
                 "override": "replace",
                 "summary": "Spring Boot application service",
                 "environment": {"SPRING_APPLICATION_JSON": '{"server": {"port": 8888}}'},
-                "command": 'java -jar "/app/test.jar"',
+                "command": "java -jar /app/test.jar",
                 "startup": "enabled",
             }
         }
@@ -179,7 +179,7 @@ def test_invalid_application_config(
 ) -> None:
     """
     arrange: provide a simulated Spring Boot application image.
-    act: update the application-config with am invalid value.
+    act: update the application-config with an invalid value.
     assert: Spring Boot charm should enter blocked status.
     """
     patch.start({"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()})
@@ -189,3 +189,108 @@ def test_invalid_application_config(
     status = harness.model.unit.status
     assert isinstance(status, BlockedStatus)
     assert status.message == message
+
+
+@pytest.mark.parametrize("jvm_config", ["-Xmx1G", "-Xms200k", "-Xmx10m -Xms4096"])
+def test_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update the jvm-config with a valid value.
+    assert: Spring Boot charm should start the charm with correct environment variables in the
+        pebble layer.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        container_mock_callback={
+            "spring-boot-app": lambda container: container.process_mock.register_command_handler(
+                lambda command: command[0].endswith("java"),
+                lambda command, environment: (0, "", ""),
+            )
+        },
+    )
+    harness.begin_with_initial_hooks()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.update_config({"jvm-config": jvm_config})
+    status = harness.model.unit.status
+    assert isinstance(status, ActiveStatus)
+    container = harness.model.unit.containers["spring-boot-app"]
+    assert (
+        container.get_plan().to_dict()["services"]["spring-boot-app"]["environment"][
+            "JAVA_TOOL_OPTIONS"
+        ]
+        == jvm_config
+    )
+
+
+@pytest.mark.parametrize("jvm_config", ["-Xmx1G --invalid", "-Xmx10m --invalid -Xms4096"])
+def test_invalid_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update the jvm-config with an invalid value.
+    assert: Spring Boot charm should enter blocking status.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        container_mock_callback={
+            "spring-boot-app": lambda container: container.process_mock.register_command_handler(
+                lambda command: command[0].endswith("java"),
+                lambda command, environment: (0, "", "")
+                if "--invalid" not in environment["JAVA_TOOL_OPTIONS"]
+                else (1, "", ""),
+            )
+        },
+    )
+    harness.begin_with_initial_hooks()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.update_config({"jvm-config": jvm_config})
+    status = harness.model.unit.status
+    assert isinstance(status, BlockedStatus)
+    assert status.message == "Invalid jvm-config"
+
+
+@pytest.mark.parametrize(
+    "jvm_config,memory_constraint,okay",
+    [
+        ("-Xmx1G", None, True),
+        ("-Xmx1G", "2Gi", True),
+        ("-Xmx10m -Xms4096", "20Mi", True),
+        ("-Xms4G", "1Gi", False),
+        ("-Xms1G -Xmx4G", "2Gi", False),
+    ],
+)
+def test_jvm_heap_memory_config(
+    harness: Harness,
+    patch: SpringBootPatch,
+    jvm_config: str,
+    memory_constraint: typing.Optional[str],
+    okay: bool,
+):
+    """
+    arrange: provide a simulated Spring Boot application image and set the container memory
+        constraint.
+    act: update the heap memory related jvm-config.
+    assert: Spring Boot charm should enter blocking status when the JVM heap memory configurate
+        conflicts with the container memory constraint.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        container_mock_callback={
+            "spring-boot-app": lambda container: container.process_mock.register_command_handler(
+                lambda command: command[0].endswith("java"),
+                lambda command, environment: (0, "", ""),
+            )
+        },
+        memory_constraint=memory_constraint,
+    )
+    harness.begin_with_initial_hooks()
+    harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
+    harness.update_config({"jvm-config": jvm_config})
+    status = harness.model.unit.status
+    if okay:
+        assert isinstance(status, ActiveStatus)
+    else:
+        assert isinstance(status, BlockedStatus)
+        assert status.message == (
+            "Invalid jvm-config, "
+            "Java heap memory specification exceeds application memory constraint"
+        )

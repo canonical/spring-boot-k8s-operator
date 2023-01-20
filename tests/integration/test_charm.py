@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 APP_NAME = "spring-boot-k8s"
 BUILDPACK_APP_NAME = f"{APP_NAME}-buildpack"
+MEM_1G_APP_NAME = f"{APP_NAME}-1g"
+MEM_1G_BUILDPACK_APP_NAME = f"{BUILDPACK_APP_NAME}-1g"
+ALL_APP_NAMES = [APP_NAME, BUILDPACK_APP_NAME, MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]
 
 
 @pytest.mark.abort_on_fail
@@ -37,19 +40,35 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
         ),
         ops_test.model.deploy(
             charm,
+            resources=executable_jar_resources,
+            application_name=MEM_1G_APP_NAME,
+            series="jammy",
+            constraints={"mem": 512},  # memory constraint unit is MiB
+        ),
+        ops_test.model.deploy(
+            charm,
             resources=buildpack_resources,
             application_name=BUILDPACK_APP_NAME,
             series="jammy",
         ),
-        ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
+        ops_test.model.deploy(
+            charm,
+            resources=buildpack_resources,
+            application_name=MEM_1G_BUILDPACK_APP_NAME,
+            series="jammy",
+            constraints={"mem": 512},
+        ),
+        ops_test.model.wait_for_idle(
+            apps=ALL_APP_NAMES,
+            status="active",
+        ),
     )
-    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+    for name in ALL_APP_NAMES:
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
             assert requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5).status_code == 200
 
 
-@pytest.mark.abort_on_fail
 async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_list) -> None:
     """
     arrange: deploy Spring Boot applications.
@@ -69,14 +88,13 @@ async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_lis
             ),
             ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
         )
-        for name in [APP_NAME, BUILDPACK_APP_NAME]:
+        for name in (APP_NAME, BUILDPACK_APP_NAME):
             unit_ips = await get_unit_ip_list(name)
             for unit_ip in unit_ips:
                 response = requests.get(f"http://{unit_ip}:{port}/hello-world", timeout=5)
                 assert response.status_code == 200
 
 
-@pytest.mark.abort_on_fail
 async def test_application_config(ops_test: OpsTest, get_unit_ip_list) -> None:
     """
     arrange: deploy Spring Boot applications.
@@ -93,9 +111,63 @@ async def test_application_config(ops_test: OpsTest, get_unit_ip_list) -> None:
         ),
         ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )
-    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
             response = requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5)
             assert response.status_code == 200
             assert "Bonjour" in response.text
+
+
+async def test_jvm_config(ops_test: OpsTest, get_unit_ip_list) -> None:
+    """
+    arrange: deploy Spring Boot applications.
+    act: Update the jvm-config to configure JVM heap memory settings.
+    assert: Spring Boot example applications should run with corresponding JVM parameters.
+    """
+    assert ops_test.model
+    jvm_config = "-Xms256m -Xmx512M"
+    await asyncio.gather(
+        ops_test.model.applications[APP_NAME].set_config({"jvm-config": jvm_config}),
+        ops_test.model.applications[BUILDPACK_APP_NAME].set_config({"jvm-config": jvm_config}),
+        ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
+    )
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
+        unit_ips = await get_unit_ip_list(name)
+        for unit_ip in unit_ips:
+            response = requests.get(f"http://{unit_ip}:8080/jvm-arguments", timeout=5)
+            assert response.status_code == 200
+            assert response.json() == jvm_config.split()
+
+
+async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
+    """
+    arrange: deploy Spring Boot applications.
+    act: Update the jvm-config with some invalid values.
+    assert: Spring Boot example applications should enter blocked status.
+    """
+    assert ops_test.model
+    invalid_jvm_config = "-Xms256A -Xmx512G"
+    await asyncio.gather(
+        ops_test.model.applications[APP_NAME].set_config({"jvm-config": invalid_jvm_config}),
+        ops_test.model.applications[BUILDPACK_APP_NAME].set_config(
+            {"jvm-config": invalid_jvm_config}
+        ),
+        ops_test.model.applications[MEM_1G_APP_NAME].set_config({"jvm-config": "-Xms256m -Xmx2G"}),
+        ops_test.model.applications[MEM_1G_BUILDPACK_APP_NAME].set_config(
+            {"jvm-config": "-Xms256m -Xmx2G"}
+        ),
+        ops_test.model.wait_for_idle(apps=ALL_APP_NAMES),
+    )
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
+        for unit in ops_test.model.applications[name].units:
+            assert unit.workload_status == "blocked"
+            assert unit.workload_status_message == "Invalid jvm-config"
+
+    for name in (MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME):
+        for unit in ops_test.model.applications[name].units:
+            assert unit.workload_status == "blocked"
+            assert unit.workload_status_message == (
+                "Invalid jvm-config, "
+                "Java heap memory specification exceeds application memory constraint"
+            )

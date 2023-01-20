@@ -7,8 +7,9 @@ import pathlib
 import tarfile
 import tempfile
 import typing
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, _patch, patch
 
+import kubernetes.client
 import ops.model
 import ops.pebble
 
@@ -132,6 +133,54 @@ class ContainerFileSystemMock:
         return self._path_convert(path).exists()
 
 
+class ContainerProcessMock:
+    """Mock class for container process execution system."""
+
+    def __init__(self):
+        """Initialize the ContainerProcessMock instance."""
+        self._handlers = []
+
+    def register_command_handler(
+        self,
+        match: typing.Callable[[typing.List[str]], bool],
+        handler: typing.Callable[
+            [typing.List[str], typing.Dict[str, str]], typing.Tuple[int, str, str]
+        ],
+    ) -> None:
+        """Add a handler for certain command to mock the command execution, last match rules.
+
+        Args:
+            match: match function for the handler. match function is a function that takes a
+                list of string (command) and return boolean. If match returns true, the
+                corresponding handler will be executed to mock the command execution.
+            handler: handler function to mock the command execution. handler is a function that
+                takes two arguments, list of string (command) and a dict (environment arguments).
+                handler function should return a 3-tuple of (exit_code, stdout, stderr)
+        """
+        self._handlers.append((match, handler))
+
+    # the mock function signature must match ops.model.Container.exec
+    # pylint: disable=unused-argument
+    def exec(self, command: typing.List[str], environment=None, timeout=None):
+        """Mock function for :meth:`ops.model.Container.exec`."""
+        handler = None
+        for match, _handler in self._handlers:
+            if match(command):
+                handler = _handler
+        if handler is None:
+            raise RuntimeError(f"Unknown command: {repr(command)}")
+        exit_code, stdout, stderr = handler(command, environment if environment else {})
+
+        def wait_output():
+            if exit_code != 0:
+                raise ops.pebble.ExecError(
+                    command=command, exit_code=exit_code, stdout=stdout, stderr=stderr
+                )
+            return stdout, stderr
+
+        return MagicMock(wait_output=wait_output)
+
+
 class ContainerMock:
     """Mock class for :class:`ops.model.Container`."""
 
@@ -144,6 +193,7 @@ class ContainerMock:
             image: The mocking OCI image for this container.
         """
         self.file_system_mock = ContainerFileSystemMock(image=image)
+        self.process_mock = ContainerProcessMock()
         self._original_container = original_container
 
     def push(self, path: str, source: bytes) -> None:
@@ -174,6 +224,10 @@ class ContainerMock:
         """Mock function for :meth:`ops.model.Container.replan`."""
         return self._original_container.replan()
 
+    def exec(self, command: typing.List[str], environment=None, timeout=None):
+        """Mock function for :meth:`ops.model.Container.exec`."""
+        return self.process_mock.exec(command=command, environment=environment, timeout=timeout)
+
 
 class SpringBootPatch:
     """The overall patch system for Spring Boot charm unit tests."""
@@ -182,10 +236,16 @@ class SpringBootPatch:
         """Initialize the :class:`SpringBootPatch` instance."""
         self.container_mocks: typing.Dict[str, ContainerMock] = {}
         self.images: typing.Dict[str, OCIImageMock] = {}
-        self._patch = patch.multiple(
-            ops.model.Unit,
-            get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
+        self._patches: typing.List[_patch] = []
+        self._patches.append(
+            patch.multiple(
+                ops.model.Unit,
+                get_container=self._gen_get_container_mock(ops.model.Unit.get_container),
+            )
         )
+        self._container_mock_callback: typing.Dict[
+            str, typing.Callable[[ContainerMock], typing.Any]
+        ] = {}
         self.started = False
 
     def _gen_get_container_mock(
@@ -198,22 +258,65 @@ class SpringBootPatch:
                 return self.container_mocks[container_name]
             original_container = original_get_container(_self, container_name)
             container_mock = ContainerMock(original_container, self.images[container_name])
+            if container_name in self._container_mock_callback:
+                self._container_mock_callback[container_name](container_mock)
             self.container_mocks[container_name] = container_mock
             return container_mock
 
         return _get_container_mock
 
-    def start(self, images: typing.Dict[str, OCIImageMock]) -> None:
+    def start(
+        self,
+        images: typing.Dict[str, OCIImageMock],
+        container_mock_callback: typing.Optional[
+            typing.Dict[str, typing.Callable[[ContainerMock], typing.Any]]
+        ] = None,
+        memory_constraint: typing.Optional[str] = None,
+    ) -> None:
         """Start the patch system.
 
         Args:
             images: Mapping from container name to simulated OCI image.
+            container_mock_callback: Callback functions to modify the container mock after the
+                container mock generation.
+            memory_constraint: Container memory constraint for the spring-boot-app container,
+                in human-readable form (4Gi, 100Mi).
         """
         self.started = True
         self.images = images
-        self._patch.start()
+        if container_mock_callback:
+            self._container_mock_callback = container_mock_callback
+        self._patches.append(patch.multiple(kubernetes.config, load_incluster_config=MagicMock()))
+        kubernetes_pod_mock = MagicMock()
+        kubernetes_spec_mock = MagicMock()
+        kubernetes_container_mock = MagicMock()
+        kubernetes_charm_container_mock = MagicMock()
+        kubernetes_resources_mock = MagicMock()
+        kubernetes_pod_mock.spec = kubernetes_spec_mock
+        kubernetes_spec_mock.containers = [
+            kubernetes_charm_container_mock,
+            kubernetes_container_mock,
+        ]
+        kubernetes_container_mock.name = "spring-boot-app"
+        kubernetes_charm_container_mock.name = "charm"
+        kubernetes_container_mock.resources = kubernetes_resources_mock
+        kubernetes_resources_mock.limits = (
+            None if memory_constraint is None else {"memory": memory_constraint}
+        )
+        self._patches.append(
+            patch.multiple(
+                kubernetes.client.CoreV1Api,
+                read_namespaced_pod=MagicMock(return_value=kubernetes_pod_mock),
+            )
+        )
+
+        for patch_ in self._patches:
+            patch_.start()
 
     def stop(self) -> None:
         """Stop the patch system."""
         self.started = False
-        self._patch.stop()
+        self._container_mock_callback = {}
+        for patch_ in self._patches:
+            patch_.stop()
+        self._patches = []

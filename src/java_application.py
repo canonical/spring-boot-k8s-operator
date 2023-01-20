@@ -12,7 +12,7 @@ class JavaApplicationBase(abc.ABC):
     """The interface class for all Java application abstractions."""
 
     @abc.abstractmethod
-    def command(self) -> str:
+    def command(self) -> list[str]:
         """Generate the pebble command to start the Java application."""
 
 
@@ -27,13 +27,13 @@ class ExecutableJarApplication(JavaApplicationBase):
         """
         self.executable_jar_path = executable_jar_path
 
-    def command(self) -> str:
+    def command(self) -> list[str]:
         """Generate the pebble command to start the Java application.
 
         Returns:
             the pebble command to start the Java application.
         """
-        return f'java -jar "{self.executable_jar_path}"'
+        return ["java", "-jar", self.executable_jar_path]
 
 
 class BuildpackApplication(JavaApplicationBase):
@@ -53,13 +53,15 @@ class BuildpackApplication(JavaApplicationBase):
         self.class_path = class_path
         self.java_executable_path = java_executable_path
 
-    def command(self) -> str:
+    def command(self) -> list[str]:
         """Generate the command to start the Java application in a buildpack created image.
 
         Returns:
             the pebble command to start the Java application.
         """
-        return (
-            f'{self.java_executable_path} -cp "{self.class_path}" '
-            "org.springframework.boot.loader.JarLauncher"
-        )
+        return [
+            self.java_executable_path,
+            "-cp",
+            self.class_path,
+            "org.springframework.boot.loader.JarLauncher",
+        ]

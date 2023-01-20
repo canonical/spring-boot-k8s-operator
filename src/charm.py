@@ -6,17 +6,23 @@
 
 import json
 import logging
+import re
 import typing
 
+import kubernetes.client
 import ops.charm
 from ops.charm import CharmBase, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
+from ops.pebble import ExecError
 
+from charm_types import ExecResult
 from exceptions import ReconciliationError
 from java_application import BuildpackApplication, ExecutableJarApplication
 
 logger = logging.getLogger(__name__)
+
+JAVA_TOOL_OPTIONS = "JAVA_TOOL_OPTIONS"
 
 
 class SpringBootCharm(CharmBase):
@@ -87,6 +93,107 @@ class SpringBootCharm(CharmBase):
             return port
         return 8080
 
+    def _exec(
+        self, command: list[str], environment: typing.Optional[typing.Dict[str, str]] = None
+    ) -> ExecResult:
+        """Execute a command in Spring Boot application container with a timeout of 60s.
+
+        Args:
+            command: command to be executed.
+            environment: environment variables for the process.
+
+        Returns:
+            A 3-tuple of exit code, stdout and stderr.
+        """
+        container = self._spring_boot_container()
+        process = container.exec(command, environment=environment, timeout=60)
+        try:
+            stdout, stderr = process.wait_output()
+            return ExecResult(0, stdout, stderr)
+        except ExecError as error:
+            return ExecResult(
+                error.exit_code, typing.cast(str, error.stdout), typing.cast(str, error.stderr)
+            )
+
+    def _parse_human_readable_units(self, number_with_unit: str) -> int:
+        """Parse numbers with human-readable units like K, M and G.
+
+        Args:
+            number_with_unit: input string, something like ``"1G"`` or ``"33m"``.
+
+        Returns:
+            Parsed result, as an integer.
+
+        Raises:
+            ValueError: when the input number is invalid.
+        """
+        number_with_unit = number_with_unit.lower()
+        unit = number_with_unit[-1]
+        unit_scale = {"k": 2**10, "m": 2**20, "g": 2**30}
+        if unit not in unit_scale:
+            try:
+                return int(number_with_unit)
+            except ValueError as exc:
+                raise ValueError(f"Unknown human-readable unit: {repr(number_with_unit)}") from exc
+        digits = number_with_unit[:-1]
+        return int(digits) * unit_scale[unit]
+
+    def _regex_find_last(self, pattern: str, string: str, default: str) -> str:
+        """Match the last regex capturing group in the input string.
+
+        Args:
+            pattern: regular expression pattern.
+            string: input string
+            default: default value if no match is found.
+
+        Return:
+            The last matching capturing group in the input string, or ``default`` if not found.
+        """
+        matches = re.findall(pattern, string)
+        if not matches:
+            return default
+        return matches[-1]
+
+    def _jvm_config(self) -> str:
+        """Get and verify the JVM parameters defined in the charm configuration jvm-config.
+
+        Returns:
+            JVM command line arguments as a string.
+
+        Raises:
+            ReconciliationError: when the jvm-config value is invalid.
+        """
+        config = self.model.config["jvm-config"]
+        if not config:
+            return ""
+        java_heap_initial_memory = self._parse_human_readable_units(
+            self._regex_find_last("(?:^|\\s)-Xms(\\d+[kmgtKMGT]?)\\b", config, "0")
+        )
+        java_heap_maximum_memory = self._parse_human_readable_units(
+            self._regex_find_last("(?:^|\\s)-Xmx(\\d+[kmgtKMGT]?)\\b", config, "0")
+        )
+        container_memory_limit = self._get_sprint_boot_container_memory_constraint()
+        if (
+            container_memory_limit
+            and max(java_heap_maximum_memory, java_heap_initial_memory) > container_memory_limit
+        ):
+            raise ReconciliationError(
+                new_status=BlockedStatus(
+                    "Invalid jvm-config, "
+                    "Java heap memory specification exceeds application memory constraint"
+                )
+            )
+        java_app = self._detect_java_application()
+        command = java_app.command()
+        command.insert(1, "--dry-run")
+        exit_code, _, stderr = self._exec(command, environment={JAVA_TOOL_OPTIONS: config})
+        if exit_code != 0:
+            logger.error(
+                "Invalid JVM configuration, error report from java command %s: %s", command, stderr
+            )
+            raise ReconciliationError(new_status=BlockedStatus("Invalid jvm-config"))
+        return config
+
     def _sprint_boot_env(self) -> typing.Dict[str, str]:
         """Generate environment variables for the Spring Boot application process.
 
@@ -97,6 +204,9 @@ class SpringBootCharm(CharmBase):
         application_config = self._application_config()
         if application_config:
             env["SPRING_APPLICATION_JSON"] = json.dumps(self._application_config())
+        jvm_config = self._jvm_config()
+        if jvm_config:
+            env[JAVA_TOOL_OPTIONS] = jvm_config
         return env
 
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
@@ -135,8 +245,16 @@ class SpringBootCharm(CharmBase):
 
         Returns:
             An instance of :class:`ops.charm.Container` represents the Spring Boot container.
+
+        Raises:
+            ReconciliationError: when pebble is not ready in Spring Boot application container.
         """
-        return self.unit.get_container("spring-boot-app")
+        container = self.unit.get_container("spring-boot-app")
+        if not container.can_connect():
+            raise ReconciliationError(
+                new_status=WaitingStatus("Waiting for pebble"), defer_event=True
+            )
+        return container
 
     def _generate_spring_boot_layer(self) -> dict:
         """Generate Spring Boot service layer for pebble.
@@ -152,7 +270,7 @@ class SpringBootCharm(CharmBase):
                     "override": "replace",
                     "summary": "Spring Boot application service",
                     "environment": self._sprint_boot_env(),
-                    "command": command,
+                    "command": " ".join(command),
                     "startup": "enabled",
                 }
             },
@@ -167,19 +285,41 @@ class SpringBootCharm(CharmBase):
             },
         }
 
-    def _service_reconciliation(self) -> None:
-        """Run the reconciliation process for pebble services.
+    def _get_sprint_boot_container_memory_constraint(self) -> typing.Optional[int]:
+        """Get the spring-boot-app container memory limit.
+
+        Return:
+            The memory limit of the spring-boot-app container in number of bytes. ``None`` if
+            there's no limit.
 
         Raises:
-            ReconciliationError: unrecoverable errors happen during the Java application type
-                detection process, requiring the main reconciliation process to terminate the
-                reconciliation early.
+            RuntimeError: Container spring-boot-app does not exist, it shouldn't happen since
+                this function checks the existence of the spring-boot-app first.
         """
+        # ensure that the Spring Boot container is up
+        self._spring_boot_container()
+        kubernetes.config.load_incluster_config()
+        client = kubernetes.client.CoreV1Api()
+        spec: kubernetes.client.V1PodSpec = client.read_namespaced_pod(
+            name=self.unit.name.replace("/", "-"), namespace=self.model.name
+        ).spec
+        container = next(
+            (container for container in spec.containers if container.name == "spring-boot-app"),
+            None,
+        )
+        if container is None:
+            raise RuntimeError("Container spring-boot-app does not exist")
+        limits = container.resources.limits
+        if limits is None:
+            return 0
+        memory_limit = container.resources.limits.get("memory")
+        if memory_limit is None:
+            return 0
+        return self._parse_human_readable_units(memory_limit.removesuffix("i"))
+
+    def _service_reconciliation(self) -> None:
+        """Run the reconciliation process for pebble services."""
         container = self._spring_boot_container()
-        if not container.can_connect():
-            raise ReconciliationError(
-                new_status=WaitingStatus("Waiting for pebble"), defer_event=True
-            )
         container.add_layer("spring-boot-app", self._generate_spring_boot_layer(), combine=True)
         container.replan()
 

@@ -5,3 +5,9 @@ options:
       Spring Boot configuration properties in JSON format, it will be passed to 
       the Spring Boot application as SPRING_APPLICATION_JSON environment variable.
     default: ""
+  jvm-config:
+    type: string
+    description: >
+      JVM configuration that will be passed to the Spring Boot application
+      as JAVA_TOOL_OPTIONS environment variable.
+    default: ""
