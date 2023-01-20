@@ -315,18 +315,19 @@ class SpringBootCharm(CharmBase):
         spec: kubernetes.client.V1PodSpec = client.read_namespaced_stateful_set(
             name=self.app.name, namespace=self.model.name
         ).spec.template.spec
-        for container in spec.containers:
-            if container.name != "spring-boot-app":
-                continue
-            limits = container.resources.limits
-            if limits is None:
-                return 0
-            memory_limit = container.resources.limits.get("memory")
-            if memory_limit is None:
-                return 0
-            return self._parse_human_readable_units(memory_limit.removesuffix("i"))
-
-        raise RuntimeError("Container spring-boot-app does not exist")
+        container = next(
+            (container for container in spec.containers if container.name == "spring-boot-app"),
+            None,
+        )
+        if container is None:
+            raise RuntimeError("Container spring-boot-app does not exist")
+        limits = container.resources.limits
+        if limits is None:
+            return 0
+        memory_limit = container.resources.limits.get("memory")
+        if memory_limit is None:
+            return 0
+        return self._parse_human_readable_units(memory_limit.removesuffix("i"))
 
     def _service_reconciliation(self) -> None:
         """Run the reconciliation process for pebble services."""
