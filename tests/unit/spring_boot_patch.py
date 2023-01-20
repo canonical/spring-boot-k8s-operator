@@ -287,16 +287,12 @@ class SpringBootPatch:
         if container_mock_callback:
             self._container_mock_callback = container_mock_callback
         self._patches.append(patch.multiple(kubernetes.config, load_incluster_config=MagicMock()))
-        kubernetes_stateful_set_mock = MagicMock(spec=kubernetes.client.V1StatefulSet)
-        kubernetes_stateful_set_spec_mock = MagicMock(spec=kubernetes.client.V1StatefulSetSpec)
-        kubernetes_pod_template_mock = MagicMock(spec=kubernetes.client.V1PodTemplate)
-        kubernetes_spec_mock = MagicMock(spec=kubernetes.client.V1PodTemplateSpec)
-        kubernetes_container_mock = MagicMock(spec=kubernetes.client.V1Container)
-        kubernetes_charm_container_mock = MagicMock(spec=kubernetes.client.V1Container)
-        kubernetes_resources_mock = MagicMock(spec=kubernetes.client.V1ResourceRequirements)
-        kubernetes_stateful_set_mock.spec = kubernetes_stateful_set_spec_mock
-        kubernetes_stateful_set_spec_mock.template = kubernetes_pod_template_mock
-        kubernetes_pod_template_mock.spec = kubernetes_spec_mock
+        kubernetes_pod_mock = MagicMock()
+        kubernetes_spec_mock = MagicMock()
+        kubernetes_container_mock = MagicMock()
+        kubernetes_charm_container_mock = MagicMock()
+        kubernetes_resources_mock = MagicMock()
+        kubernetes_pod_mock.spec = kubernetes_spec_mock
         kubernetes_spec_mock.containers = [
             kubernetes_charm_container_mock,
             kubernetes_container_mock,
@@ -309,8 +305,8 @@ class SpringBootPatch:
         )
         self._patches.append(
             patch.multiple(
-                kubernetes.client.AppsV1Api,
-                read_namespaced_stateful_set=MagicMock(return_value=kubernetes_stateful_set_mock),
+                kubernetes.client.CoreV1Api,
+                read_namespaced_pod=MagicMock(return_value=kubernetes_pod_mock),
             )
         )
 

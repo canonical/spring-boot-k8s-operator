@@ -311,10 +311,10 @@ class SpringBootCharm(CharmBase):
         # ensure that the Spring Boot container is up
         self._spring_boot_container()
         kubernetes.config.load_incluster_config()
-        client = kubernetes.client.AppsV1Api()
-        spec: kubernetes.client.V1PodSpec = client.read_namespaced_stateful_set(
-            name=self.app.name, namespace=self.model.name
-        ).spec.template.spec
+        client = kubernetes.client.CoreV1Api()
+        spec: kubernetes.client.V1PodSpec = client.read_namespaced_pod(
+            name=self.unit.name.replace("/", "-"), namespace=self.model.name
+        ).spec
         container = next(
             (container for container in spec.containers if container.name == "spring-boot-app"),
             None,
