@@ -6,7 +6,6 @@
 """The abstraction of different types of Java applications."""
 
 import abc
-import typing
 
 
 class JavaApplicationBase(abc.ABC):
