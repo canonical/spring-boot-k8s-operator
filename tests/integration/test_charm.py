@@ -169,5 +169,5 @@ async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
             assert unit.workload_status == "blocked"
             assert unit.workload_status_message == (
                 "Invalid jvm-config, "
-                "Java heap memory requirement exceeds application memory constraint"
+                "Java heap memory specification exceeds application memory constraint"
             )
