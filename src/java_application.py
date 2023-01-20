@@ -13,7 +13,7 @@ class JavaApplicationBase(abc.ABC):
     """The interface class for all Java application abstractions."""
 
     @abc.abstractmethod
-    def command(self) -> typing.List[str]:
+    def command(self) -> list[str]:
         """Generate the pebble command to start the Java application."""
 
 
@@ -28,7 +28,7 @@ class ExecutableJarApplication(JavaApplicationBase):
         """
         self.executable_jar_path = executable_jar_path
 
-    def command(self) -> typing.List[str]:
+    def command(self) -> list[str]:
         """Generate the pebble command to start the Java application.
 
         Returns:
@@ -54,7 +54,7 @@ class BuildpackApplication(JavaApplicationBase):
         self.class_path = class_path
         self.java_executable_path = java_executable_path
 
-    def command(self) -> typing.List[str]:
+    def command(self) -> list[str]:
         """Generate the command to start the Java application in a buildpack created image.
 
         Returns:

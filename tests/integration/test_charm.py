@@ -88,7 +88,7 @@ async def test_application_config_server_port(ops_test: OpsTest, get_unit_ip_lis
             ),
             ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
         )
-        for name in [APP_NAME, BUILDPACK_APP_NAME]:
+        for name in (APP_NAME, BUILDPACK_APP_NAME):
             unit_ips = await get_unit_ip_list(name)
             for unit_ip in unit_ips:
                 response = requests.get(f"http://{unit_ip}:{port}/hello-world", timeout=5)
@@ -111,7 +111,7 @@ async def test_application_config(ops_test: OpsTest, get_unit_ip_list) -> None:
         ),
         ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )
-    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
             response = requests.get(f"http://{unit_ip}:8080/hello-world", timeout=5)
@@ -132,7 +132,7 @@ async def test_jvm_config(ops_test: OpsTest, get_unit_ip_list) -> None:
         ops_test.model.applications[BUILDPACK_APP_NAME].set_config({"jvm-config": jvm_config}),
         ops_test.model.wait_for_idle(apps=[APP_NAME, BUILDPACK_APP_NAME], status="active"),
     )
-    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
         unit_ips = await get_unit_ip_list(name)
         for unit_ip in unit_ips:
             response = requests.get(f"http://{unit_ip}:8080/jvm-arguments", timeout=5)
@@ -159,12 +159,12 @@ async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
         ),
         ops_test.model.wait_for_idle(apps=ALL_APP_NAMES),
     )
-    for name in [APP_NAME, BUILDPACK_APP_NAME]:
+    for name in (APP_NAME, BUILDPACK_APP_NAME):
         for unit in ops_test.model.applications[name].units:
             assert unit.workload_status == "blocked"
             assert unit.workload_status_message == "Invalid jvm-config"
 
-    for name in [MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]:
+    for name in (MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME):
         for unit in ops_test.model.applications[name].units:
             assert unit.workload_status == "blocked"
             assert unit.workload_status_message == (

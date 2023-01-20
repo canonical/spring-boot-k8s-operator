@@ -94,7 +94,7 @@ class SpringBootCharm(CharmBase):
         return 8080
 
     def _exec(
-        self, command: typing.List[str], environment: typing.Optional[typing.Dict[str, str]] = None
+        self, command: list[str], environment: typing.Optional[typing.Dict[str, str]] = None
     ) -> ExecResult:
         """Execute a command in Spring Boot application container with a timeout of 60s.
 
