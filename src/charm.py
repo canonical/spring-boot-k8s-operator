@@ -167,10 +167,10 @@ class SpringBootCharm(CharmBase):
         if not config:
             return ""
         java_heap_initial_memory = self._parse_human_readable_units(
-            self._regex_find_last("(?:^|\\s)(-Xms\\d+[kmgtKMGT]?)\\b", config, "0M")
+            self._regex_find_last("(?:^|\\s)-Xms(\\d+[kmgtKMGT]?)\\b", config, "0")
         )
         java_heap_maximum_memory = self._parse_human_readable_units(
-            self._regex_find_last("(?:^|\\s)(-Xmx\\d+[kmgtKMGT]?)\\b", config, "0M")
+            self._regex_find_last("(?:^|\\s)-Xmx(\\d+[kmgtKMGT]?)\\b", config, "0")
         )
         container_memory_limit = self._get_sprint_boot_container_memory_constraint()
         if (
