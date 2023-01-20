@@ -16,6 +16,7 @@ from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
 
+from charm_types import ExecResult
 from exceptions import ReconciliationError
 from java_application import BuildpackApplication, ExecutableJarApplication
 
@@ -94,7 +95,7 @@ class SpringBootCharm(CharmBase):
 
     def _exec(
         self, command: typing.List[str], environment: typing.Optional[typing.Dict[str, str]] = None
-    ) -> typing.Tuple[int, str, str]:
+    ) -> ExecResult:
         """Execute a command in Spring Boot application container with a timeout of 60s.
 
         Args:
@@ -108,15 +109,17 @@ class SpringBootCharm(CharmBase):
         process = container.exec(command, environment=environment, timeout=60)
         try:
             stdout, stderr = process.wait_output()
-            return 0, stdout, stderr
+            return ExecResult(0, stdout, stderr)
         except ExecError as error:
-            return error.exit_code, typing.cast(str, error.stdout), typing.cast(str, error.stderr)
+            return ExecResult(
+                error.exit_code, typing.cast(str, error.stdout), typing.cast(str, error.stderr)
+            )
 
-    def _parse_human_readable_units(self, number: str) -> int:
+    def _parse_human_readable_units(self, number_with_unit: str) -> int:
         """Parse numbers with human-readable units like K, M and G.
 
         Args:
-            number: input string, something like ``"1G"`` or ``"33m"``.
+            number_with_unit: input string, something like ``"1G"`` or ``"33m"``.
 
         Returns:
             Parsed result, as an integer.
@@ -124,15 +127,15 @@ class SpringBootCharm(CharmBase):
         Raises:
             ValueError: when the input number is invalid.
         """
-        number = number.lower()
-        unit = number[-1].lower()
+        number_with_unit = number_with_unit.lower()
+        unit = number_with_unit[-1]
         unit_scale = {"k": 2**10, "m": 2**20, "g": 2**30}
         if unit not in unit_scale:
             try:
-                return int(number)
+                return int(number_with_unit)
             except ValueError as exc:
-                raise ValueError(f"Unknown human-readable unit: {repr(number)}") from exc
-        digits = number[:-1]
+                raise ValueError(f"Unknown human-readable unit: {repr(number_with_unit)}") from exc
+        digits = number_with_unit[:-1]
         return int(digits) * unit_scale[unit]
 
     def _extract_jvm_heap_initial_memory(self, jvm_config: str) -> int:
@@ -145,6 +148,7 @@ class SpringBootCharm(CharmBase):
             JVM heap initial memory size in number of bytes. ``0`` if not defined in the JVM
             configuration string.
         """
+        # extract the -Xms<size> JVM parameter
         candidates = re.findall("(^|\\s)(-Xms\\d+[kmgtKMGT]?)\\b", jvm_config)
         if not candidates:
             return 0
@@ -160,6 +164,7 @@ class SpringBootCharm(CharmBase):
             JVM heap maximum memory size in number of bytes. ``0`` if not defined in the JVM
             configuration string.
         """
+        # extract the -Xmx<size> JVM parameter
         candidates = re.findall("(^|\\s)(-Xmx\\d+[kmgtKMGT]?)\\b", jvm_config)
         if not candidates:
             return 0
@@ -187,7 +192,7 @@ class SpringBootCharm(CharmBase):
             raise ReconciliationError(
                 new_status=BlockedStatus(
                     "Invalid jvm-config, "
-                    "Java heap memory requirement exceeds application memory constraint"
+                    "Java heap memory specification exceeds application memory constraint"
                 )
             )
         java_app = self._detect_java_application()
@@ -306,10 +311,10 @@ class SpringBootCharm(CharmBase):
         # ensure that the Spring Boot container is up
         self._spring_boot_container()
         kubernetes.config.load_incluster_config()
-        client = kubernetes.client.CoreV1Api()
-        spec: kubernetes.client.V1PodSpec = client.read_namespaced_pod(
-            name=f"{self.app.name}-0", namespace=self.model.name
-        ).spec
+        client = kubernetes.client.AppsV1Api()
+        spec: kubernetes.client.V1PodSpec = client.read_namespaced_stateful_set(
+            name=self.app.name, namespace=self.model.name
+        ).spec.template.spec
         for container in spec.containers:
             if container.name != "spring-boot-app":
                 continue

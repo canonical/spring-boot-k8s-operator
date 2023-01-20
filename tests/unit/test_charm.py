@@ -292,5 +292,5 @@ def test_jvm_heap_memory_config(
         assert isinstance(status, BlockedStatus)
         assert status.message == (
             "Invalid jvm-config, "
-            "Java heap memory requirement exceeds application memory constraint"
+            "Java heap memory specification exceeds application memory constraint"
         )
