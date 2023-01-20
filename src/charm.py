@@ -138,37 +138,21 @@ class SpringBootCharm(CharmBase):
         digits = number_with_unit[:-1]
         return int(digits) * unit_scale[unit]
 
-    def _extract_jvm_heap_initial_memory(self, jvm_config: str) -> int:
-        """Get the JVM heap initial memory size from a JVM configuration string.
+    def _regex_find_last(self, pattern: str, string: str, default: str) -> str:
+        """Match the last regex capturing group in the input string.
 
         Args:
-            jvm_config: JVM configuration string.
+            pattern: regular expression pattern.
+            string: input string
+            default: default value if no match is found.
 
-        Returns:
-            JVM heap initial memory size in number of bytes. ``0`` if not defined in the JVM
-            configuration string.
+        Return:
+            The last matching capturing group in the input string, or ``default`` if not found.
         """
-        # extract the -Xms<size> JVM parameter
-        candidates = re.findall("(^|\\s)(-Xms\\d+[kmgtKMGT]?)\\b", jvm_config)
-        if not candidates:
-            return 0
-        return self._parse_human_readable_units(candidates[-1][-1].removeprefix("-Xms"))
-
-    def _extract_jvm_heap_maximum_memory(self, jvm_config: str) -> int:
-        """Get the JVM heap maximum memory size from a JVM configuration string.
-
-        Args:
-            jvm_config: JVM configuration string.
-
-        Returns:
-            JVM heap maximum memory size in number of bytes. ``0`` if not defined in the JVM
-            configuration string.
-        """
-        # extract the -Xmx<size> JVM parameter
-        candidates = re.findall("(^|\\s)(-Xmx\\d+[kmgtKMGT]?)\\b", jvm_config)
-        if not candidates:
-            return 0
-        return self._parse_human_readable_units(candidates[-1][-1].removeprefix("-Xmx"))
+        matches = re.findall(pattern, string)
+        if not matches:
+            return default
+        return matches[-1]
 
     def _jvm_config(self) -> str:
         """Get and verify the JVM parameters defined in the charm configuration jvm-config.
@@ -182,8 +166,12 @@ class SpringBootCharm(CharmBase):
         config = self.model.config["jvm-config"]
         if not config:
             return ""
-        java_heap_initial_memory = self._extract_jvm_heap_initial_memory(config)
-        java_heap_maximum_memory = self._extract_jvm_heap_maximum_memory(config)
+        java_heap_initial_memory = self._parse_human_readable_units(
+            self._regex_find_last("(?:^|\\s)(-Xms\\d+[kmgtKMGT]?)\\b", config, "0M")
+        )
+        java_heap_maximum_memory = self._parse_human_readable_units(
+            self._regex_find_last("(?:^|\\s)(-Xmx\\d+[kmgtKMGT]?)\\b", config, "0M")
+        )
         container_memory_limit = self._get_sprint_boot_container_memory_constraint()
         if (
             container_memory_limit
