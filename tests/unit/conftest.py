@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 # pylint: disable=unused-argument
@@ -16,13 +16,11 @@ from .spring_boot_patch import SpringBootPatch
 @pytest.fixture(name="harness")
 def harness_fixture():
     """Ops testing framework harness fixture."""
-    ops.testing.SIMULATE_CAN_CONNECT = True
     harness = ops.testing.Harness(SpringBootCharm)
 
     yield harness
 
     harness.cleanup()
-    ops.testing.SIMULATE_CAN_CONNECT = False
 
 
 @pytest.fixture(name="patch")
