@@ -195,6 +195,7 @@ class ContainerMock:
         self.file_system_mock = ContainerFileSystemMock(image=image)
         self.process_mock = ContainerProcessMock()
         self._original_container = original_container
+        # The _pebble attribute is needed by harness
         self._pebble = original_container._pebble
 
     def push(self, path: str, source: bytes) -> None:
