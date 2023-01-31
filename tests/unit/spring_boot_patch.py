@@ -195,6 +195,7 @@ class ContainerMock:
         self.file_system_mock = ContainerFileSystemMock(image=image)
         self.process_mock = ContainerProcessMock()
         self._original_container = original_container
+        self._pebble = original_container._pebble
 
     def push(self, path: str, source: bytes) -> None:
         """Mock function for :meth:`ops.model.Container.push`."""
