@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Spring Boot Charm service."""
@@ -77,7 +77,7 @@ class SpringBootCharm(CharmBase):
         """Get the Spring Boot application server port, default to 8080.
 
         Returns:
-            Sprint Boot server port.
+            Spring Boot server port.
 
         Raises:
             ReconciliationError: server port is provided in application-config but the value is
@@ -181,7 +181,7 @@ class SpringBootCharm(CharmBase):
         java_heap_maximum_memory = self._parse_human_readable_units(
             self._regex_find_last("(?:^|\\s)-Xmx(\\d+[kmgtKMGT]?)\\b", config, "0")
         )
-        container_memory_limit = self._get_sprint_boot_container_memory_constraint()
+        container_memory_limit = self._get_spring_boot_container_memory_constraint()
         if (
             container_memory_limit
             and max(java_heap_maximum_memory, java_heap_initial_memory) > container_memory_limit
@@ -203,7 +203,7 @@ class SpringBootCharm(CharmBase):
             raise ReconciliationError(new_status=BlockedStatus("Invalid jvm-config"))
         return config
 
-    def _sprint_boot_env(self) -> typing.Dict[str, str]:
+    def _spring_boot_env(self) -> typing.Dict[str, str]:
         """Generate environment variables for the Spring Boot application process.
 
         Returns:
@@ -278,7 +278,7 @@ class SpringBootCharm(CharmBase):
                 "spring-boot-app": {
                     "override": "replace",
                     "summary": "Spring Boot application service",
-                    "environment": self._sprint_boot_env(),
+                    "environment": self._spring_boot_env(),
                     "command": " ".join(command),
                     "startup": "enabled",
                 }
@@ -294,7 +294,7 @@ class SpringBootCharm(CharmBase):
             },
         }
 
-    def _get_sprint_boot_container_memory_constraint(self) -> typing.Optional[int]:
+    def _get_spring_boot_container_memory_constraint(self) -> typing.Optional[int]:
         """Get the spring-boot-app container memory limit.
 
         Return:

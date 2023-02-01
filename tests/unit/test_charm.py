@@ -17,7 +17,7 @@ from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 import exceptions
 
 
-def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
+def test_spring_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
@@ -135,7 +135,7 @@ def test_java_application_type_detection_failure(harness: Harness, patch: Spring
     assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
 
 
-def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
+def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated Spring Boot application image.
     act: update the application-config to update the Spring Boot server port.
