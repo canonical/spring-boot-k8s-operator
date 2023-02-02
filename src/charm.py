@@ -11,7 +11,8 @@ import typing
 
 import kubernetes.client
 import ops.charm
-from ops.charm import CharmBase, CharmEvents, EventBase
+from ops.charm import CharmBase, CharmEvents, EventBase, RelationBrokenEvent
+from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
@@ -45,6 +46,74 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
+        self.database: typing.Optional[DatabaseRequires] = self._setup_database_requirer(
+            "mysql", "mysql"
+        )
+
+    def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
+        """Handle the creation of relations and listeners.
+
+        Args:
+            relation_name: Name of the data relation
+            database_name: Name of the database (could be overwritten by the provider)
+
+        Returns:
+            DatabaseRequires object
+        """
+        database_requirer = DatabaseRequires(
+            self,
+            relation_name=relation_name,
+            database_name=database_name,
+        )
+        self.framework.observe(database_requirer.on.database_created, self._on_database_created)
+        self.framework.observe(self.on[relation_name].relation_broken, self._on_relation_broken)
+        return database_requirer
+
+    def _on_database_created(self, event: DatabaseCreatedEvent) -> None:
+        """Event triggered when a database was created for this application.
+
+        Args:
+            event: The DatabaseCreatedEvent object
+        """
+        logger.debug("Database credentials are received: %s", event.username)
+        self.reconciliation(event)
+
+    def _on_relation_broken(self, event: RelationBrokenEvent) -> None:
+        """Handle relation broken event.
+
+        Args:
+            event: The RelationBrokenEvent object
+        """
+        logger.debug("Relation with database removed: %s", event.relation.name)
+        self.reconciliation(event)
+
+    def _datasource(self) -> dict[str, str]:
+        """Compute datasource dict and returns it.
+
+        Returns:
+            datasource dict
+        """
+        if isinstance(self.database, DatabaseRequires):
+            relations_data = list(self.database.fetch_relation_data().values())
+            if len(relations_data) > 0:
+                data = relations_data[0]
+                if "endpoints" in data and "username" in data and "password" in data:
+                    # We assume that the relation follows the following json schema:
+                    # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
+                    database_name = data.get("database", self.database.database)
+                    endpoint = data["endpoints"].split(",")[0]
+                    host = endpoint.split(":")[0]
+                    port = endpoint.split(":")[1]
+                    return {
+                        "username": data["username"],
+                        "password": data["password"],
+                        "url": f"jdbc:mysql://{host}:{port}/{database_name}",
+                    }
+        return {
+            "username": "",
+            "password": "",
+            "url": "",
+        }
 
     def _application_config(self) -> dict | None:
         """Decode the value of the charm configuration application-config.
@@ -61,6 +130,11 @@ class SpringBootCharm(CharmBase):
                 return None
             application_config = json.loads(config)
             if isinstance(application_config, dict):
+                if "spring" not in application_config:
+                    application_config["spring"] = {}
+                if "datasource" not in application_config["spring"]:
+                    application_config["spring"]["datasource"] = {}
+                application_config["spring"]["datasource"] = self._datasource()
                 return application_config
             logger.error("Invalid application-config value: %s", repr(config))
             raise ReconciliationError(
