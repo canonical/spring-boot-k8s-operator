@@ -34,6 +34,8 @@ class SpringBootCharm(CharmBase):
 
     on = CharmEvents()
 
+    on = CharmEvents()
+
     def __init__(self, *args: typing.Any) -> None:
         """Initialize the instance.
 
