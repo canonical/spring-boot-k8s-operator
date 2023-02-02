@@ -294,3 +294,15 @@ def test_jvm_heap_memory_config(
             "Invalid jvm-config, "
             "Java heap memory specification exceeds application memory constraint"
         )
+
+
+def test_pebble_ready(
+    harness: Harness,
+    patch: SpringBootPatch,
+):
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+    )
+    harness.begin_with_initial_hooks()
+    harness.container_pebble_ready("spring-boot-app")
+    assert isinstance(harness.model.unit.status, ActiveStatus)
