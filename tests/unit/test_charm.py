@@ -300,6 +300,11 @@ def test_pebble_ready(
     harness: Harness,
     patch: SpringBootPatch,
 ):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: set pebble as ready.
+    assert: the unit should have the ActiveStatus
+    """
     patch.start(
         {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
     )
