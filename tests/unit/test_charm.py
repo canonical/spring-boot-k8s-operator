@@ -296,10 +296,7 @@ def test_jvm_heap_memory_config(
         )
 
 
-def test_pebble_ready(
-    harness: Harness,
-    patch: SpringBootPatch,
-):
+def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     """
     arrange: provide a simulated Spring Boot application image.
     act: set pebble as ready.

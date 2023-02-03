@@ -9,7 +9,7 @@ from typing import NamedTuple
 class ExecResult(NamedTuple):
     """Command execution result.
 
-    Args:
+    Attrs:
         exit_code: command exit code.
         stdout: command stdout.
         stderr: command stderr.

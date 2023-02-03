@@ -26,7 +26,11 @@ JAVA_TOOL_OPTIONS = "JAVA_TOOL_OPTIONS"
 
 
 class SpringBootCharm(CharmBase):
-    """Spring Boot Charm service."""
+    """Spring Boot Charm service.
+
+    Attrs:
+        on: Allows for subscribing to CharmEvents
+    """
 
     on = CharmEvents()
 
