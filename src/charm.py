@@ -349,7 +349,7 @@ class SpringBootCharm(CharmBase):
                 }
             },
             "checks": {
-                "wordpress-ready": {
+                "spring-boot-ready": {
                     "override": "replace",
                     "level": "alive",
                     "http": {
