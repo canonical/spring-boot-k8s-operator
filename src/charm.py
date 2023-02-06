@@ -11,7 +11,7 @@ import typing
 
 import kubernetes.client
 import ops.charm
-from ops.charm import CharmBase, EventBase
+from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
@@ -26,7 +26,13 @@ JAVA_TOOL_OPTIONS = "JAVA_TOOL_OPTIONS"
 
 
 class SpringBootCharm(CharmBase):
-    """Spring Boot Charm service."""
+    """Spring Boot Charm service.
+
+    Attrs:
+        on: Allows for subscribing to CharmEvents
+    """
+
+    on = CharmEvents()
 
     def __init__(self, *args: typing.Any) -> None:
         """Initialize the instance.
@@ -36,6 +42,7 @@ class SpringBootCharm(CharmBase):
         """
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
+        self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
 
     def _application_config(self) -> dict | None:
         """Decode the value of the charm configuration application-config.
