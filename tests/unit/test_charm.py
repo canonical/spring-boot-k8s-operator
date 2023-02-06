@@ -17,6 +17,30 @@ from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 import exceptions
 
 
+def help_test_application_config(expected: dict, config: dict):
+    """
+    Helper to test if config has the expected attributes
+    and that they have the correct value.
+
+    Args:
+        expected: the expected dict with the en values to test
+        config: the config to be tested
+    """
+    for env_name in expected:
+        assert env_name in config
+        # To test the application config serialized as json, we unserialize it
+        if env_name == "SPRING_APPLICATION_JSON":
+            help_test_application_config(
+                json.loads(expected[env_name]), json.loads(config[env_name])
+            )
+            continue
+        if isinstance(expected[env_name], dict):
+            assert isinstance(config[env_name], dict)
+            help_test_application_config(expected[env_name], config[env_name])
+            continue
+        assert expected[env_name] == config[env_name]
+
+
 def test_spring_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
@@ -154,7 +178,7 @@ def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
         },
     }
     container = harness.model.unit.containers["spring-boot-app"]
-    assert container.get_plan().to_dict() == {
+    expected = {
         "services": {
             "spring-boot-app": {
                 "override": "replace",
@@ -165,6 +189,7 @@ def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
             }
         }
     }
+    help_test_application_config(expected, container.get_plan().to_dict())
 
 
 @pytest.mark.parametrize(
@@ -308,3 +333,37 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     harness.begin_with_initial_hooks()
     harness.container_pebble_ready("spring-boot-app")
     assert isinstance(harness.model.unit.status, ActiveStatus)
+
+
+def test_no_datasource(harness: Harness, patch: SpringBootPatch):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: start the charm and a database
+    assert: test datasource output of the charm
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+    )
+    harness.begin_with_initial_hooks()
+    harness.container_pebble_ready("spring-boot-app")
+    assert isinstance(harness.model.unit.status, ActiveStatus)
+    assert harness.charm._datasource() == {"username": "", "password": "", "url": ""}
+
+    mysql_relation_id: int = harness.add_relation("mysql", "mysql-k8s")
+
+    # Simulate sharing the credentials of a new created database.
+    # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/README.md#example
+    mysql_host = "mysql"
+    mysql_port = 3306
+    rel_data = {
+        "database": "test-database",
+        "endpoints": f"{mysql_host}:{mysql_port}",
+        "password": "test-password",
+        "username": "test-username",
+    }
+    harness.update_relation_data(mysql_relation_id, "mysql-k8s", rel_data)
+    assert harness.charm._datasource() == {
+        "password": rel_data["password"],
+        "username": rel_data["username"],
+        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/{rel_data['database']}",
+    }

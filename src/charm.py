@@ -11,8 +11,8 @@ import typing
 
 import kubernetes.client
 import ops.charm
-from ops.charm import CharmBase, CharmEvents, EventBase, RelationBrokenEvent
 from charms.data_platform_libs.v0.data_interfaces import DatabaseCreatedEvent, DatabaseRequires
+from ops.charm import CharmBase, CharmEvents, EventBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
