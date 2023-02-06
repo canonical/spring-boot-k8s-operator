@@ -283,6 +283,29 @@ class SpringBootCharm(CharmBase):
             env[JAVA_TOOL_OPTIONS] = jvm_config
         return env
 
+    def _detect_mysql_capability(self) -> bool:
+        """Detect if the mysql lib is present in the spring-boot app.
+
+        Returns:
+            True if the mysql lib is present, False otherwise.
+
+        Raises:
+            Exception: If the spring-boot app has a not recognizable type.
+        """
+        java_app = self._detect_java_application()
+        container = self._spring_boot_container()
+
+        if isinstance(java_app, BuildpackApplication):
+            files_in_app = container.list_files("/")
+            return any(filter(lambda file: file.name.endswith(".jar").startswith("mysql-connector-j-"), files_in_app))
+
+        if isinstance(java_app, ExecutableJarApplication):
+            process = container.exec(["jar", "-t", java_app.executable_jar_path])
+            output, _ = process.wait_output()
+            return any(filter(lambda file: file.name.endswith(".jar").startswith("mysql-connector-j-"), output))
+
+        raise Exception("Unknown application type")
+
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
 
