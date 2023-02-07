@@ -23,8 +23,8 @@ def help_test_application_config(expected: dict, config: dict):
     and that they have the correct value.
 
     Args:
-        expected: the expected dict with the en values to test
-        config: the config to be tested
+        expected: dict with the env values to test
+        config: dict to be tested
     """
     for env_name in expected:
         assert env_name in config
@@ -340,6 +340,8 @@ def test_datasource(harness: Harness, patch: SpringBootPatch):
     arrange: provide a simulated Spring Boot application image.
     act: start the charm and a database. Integrates the db to the charm.
     assert: test datasource output of the charm when integrated with a db or not.
+        Datasource contains the data needed to spring-boot
+        to establish a connection to the data provider.
     """
     patch.start(
         {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},

@@ -45,7 +45,7 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
         self.database: typing.Optional[DatabaseRequires] = self._setup_database_requirer(
-            "mysql", "mysql"
+            "mysql", "spring-boot"
         )
 
     def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
@@ -92,11 +92,13 @@ class SpringBootCharm(CharmBase):
         """Compute datasource dict and return it.
 
         Returns:
-            Datasource dict containing details about the data provider integration.
+            Dict containing details about the data provider integration
         """
         if self.database:
             relations_data = list(self.database.fetch_relation_data().values())
             if relations_data:
+                # There can be only one database integrated at a time
+                # cf: metadata.yaml
                 data = relations_data[0]
                 if "endpoints" in data and "username" in data and "password" in data:
                     # We assume that the relation follows the following json schema:
