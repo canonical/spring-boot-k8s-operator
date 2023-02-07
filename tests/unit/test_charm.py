@@ -357,8 +357,10 @@ def test_datasource(harness: Harness, patch: SpringBootPatch):
     # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/README.md#example
     mysql_host = "mysql"
     mysql_port = 3306
+
+    # Test without the database name provided by the provider
+    # This implies that the default "spring-boot" name was used
     rel_data = {
-        "database": "test-database",
         "endpoints": f"{mysql_host}:{mysql_port}",
         "password": "test-password",
         "username": "test-username",
@@ -367,5 +369,16 @@ def test_datasource(harness: Harness, patch: SpringBootPatch):
     assert harness.charm._datasource() == {
         "password": rel_data["password"],
         "username": rel_data["username"],
-        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/{rel_data['database']}",
+        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/spring-boot",
+    }
+
+    # Now we add a database name given by the provider
+    rel_data_update = {
+        "database": "test-database",
+    }
+    harness.update_relation_data(mysql_relation_id, "mysql-k8s", rel_data_update)
+    assert harness.charm._datasource() == {
+        "password": rel_data["password"],
+        "username": rel_data["username"],
+        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/{rel_data_update['database']}",
     }
