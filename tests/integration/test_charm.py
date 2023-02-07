@@ -33,12 +33,8 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
     assert ops_test.model
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
-    executable_jar_resources = {
-        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0@sha256:abbefdcedbb196a5744fb1c61f3d3fc166ea4b0eb46e5c6321fc7d7cdb73470c"
-    }
-    buildpack_resources = {
-        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered@sha256:554c28af2949fdf816e35ac29950b36a9e2ecf4ed39b133de3483cc5c4fbd5b4"
-    }
+    executable_jar_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"}
+    buildpack_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered"}
     # Deploy the charm and wait for idle
     await asyncio.gather(
         ops_test.model.deploy(
@@ -180,11 +176,11 @@ async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
             )
     await asyncio.gather(
         *(
-                [
-                    ops_test.model.applications[app_name].set_config({"jvm-config": ""})
-                    for app_name in ALL_APP_NAMES
-                ]
-                + [ops_test.model.wait_for_idle(apps=ALL_APP_NAMES)]
+            [
+                ops_test.model.applications[app_name].set_config({"jvm-config": ""})
+                for app_name in ALL_APP_NAMES
+            ]
+            + [ops_test.model.wait_for_idle(apps=ALL_APP_NAMES)]
         )
     )
 
