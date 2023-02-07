@@ -300,9 +300,9 @@ class SpringBootCharm(CharmBase):
             return any(filter(lambda file: file.name.endswith(".jar").startswith("mysql-connector-j-"), files_in_app))
 
         if isinstance(java_app, ExecutableJarApplication):
-            process = container.exec(["jar", "-t", java_app.executable_jar_path])
+            process = container.exec(["jar", "-t", "--file", java_app.executable_jar_path])
             output, _ = process.wait_output()
-            return any(filter(lambda file: file.name.endswith(".jar").startswith("mysql-connector-j-"), output))
+            return any(filter(lambda path: path.split("/")[-1].endswith(".jar").startswith("mysql-connector-j-"), output))
 
         raise Exception("Unknown application type")
 
