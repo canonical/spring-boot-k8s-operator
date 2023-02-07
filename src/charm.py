@@ -296,13 +296,26 @@ class SpringBootCharm(CharmBase):
         container = self._spring_boot_container()
 
         if isinstance(java_app, BuildpackApplication):
-            files_in_app = container.list_files("/")
-            return any(filter(lambda file: file.name.endswith(".jar").startswith("mysql-connector-j-"), files_in_app))
+            try:
+                files = container.list_files("/workspace/BOOT-INF/lib")
+            except FileNotFoundError:
+                return False
+
+            def is_file_mysql_connector(file):
+                return file.name.endswith(".jar") and file.name.startswith("mysql-connector-j-")
+
+            return any(filter(is_file_mysql_connector, files))
 
         if isinstance(java_app, ExecutableJarApplication):
             process = container.exec(["jar", "-t", "--file", java_app.executable_jar_path])
-            output, _ = process.wait_output()
-            return any(filter(lambda path: path.split("/")[-1].endswith(".jar").startswith("mysql-connector-j-"), output))
+            _output, _ = process.wait_output()
+            output = _output.splitlines()
+
+            def is_file_mysql_connector(path):
+                file = path.split("/")[-1]
+                return file.endswith(".jar") and file.startswith("mysql-connector-j-")
+
+            return any(filter(is_file_mysql_connector, output))
 
         raise Exception("Unknown application type")
 
