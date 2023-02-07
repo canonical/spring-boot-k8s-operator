@@ -35,8 +35,6 @@ class SpringBootCharm(CharmBase):
 
     on = CharmEvents()
 
-    on = CharmEvents()
-
     def __init__(self, *args: typing.Any) -> None:
         """Initialize the instance.
 
@@ -51,11 +49,14 @@ class SpringBootCharm(CharmBase):
         )
 
     def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
-        """Handle the creation of relations and listeners.
+        """Set up a DatabaseRequires instance.
+
+        The DatabaseRequires instance is an interface between the charm and various data providers.
+        It handles those relations and emit events to help us abstract these integrations.
 
         Args:
             relation_name: Name of the data relation
-            database_name: Name of the database (could be overwritten by the provider)
+            database_name: Name of the database (can be overwritten by the provider)
 
         Returns:
             DatabaseRequires object
@@ -88,14 +89,14 @@ class SpringBootCharm(CharmBase):
         self.reconciliation(event)
 
     def _datasource(self) -> dict[str, str]:
-        """Compute datasource dict and returns it.
+        """Compute datasource dict and return it.
 
         Returns:
-            datasource dict
+            Datasource dict containing details about the data provider integration.
         """
-        if isinstance(self.database, DatabaseRequires):
+        if self.database:
             relations_data = list(self.database.fetch_relation_data().values())
-            if len(relations_data) > 0:
+            if relations_data:
                 data = relations_data[0]
                 if "endpoints" in data and "username" in data and "password" in data:
                     # We assume that the relation follows the following json schema:

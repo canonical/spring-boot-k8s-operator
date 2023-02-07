@@ -335,11 +335,11 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     assert isinstance(harness.model.unit.status, ActiveStatus)
 
 
-def test_no_datasource(harness: Harness, patch: SpringBootPatch):
+def test_datasource(harness: Harness, patch: SpringBootPatch):
     """
     arrange: provide a simulated Spring Boot application image.
-    act: start the charm and a database
-    assert: test datasource output of the charm
+    act: start the charm and a database. Integrates the db to the charm.
+    assert: test datasource output of the charm when integrated with a db or not.
     """
     patch.start(
         {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
