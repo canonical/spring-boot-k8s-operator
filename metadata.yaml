@@ -22,5 +22,10 @@ resources:
     type: oci-image
     description: Spring Boot application image.
 
+requires:
+  ingress:
+    interface: ingress
+    limit: 1
+
 assumes:
   - k8s-api

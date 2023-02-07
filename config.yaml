@@ -11,3 +11,17 @@ options:
       JVM configuration that will be passed to the Spring Boot application
       as JAVA_TOOL_OPTIONS environment variable.
     default: ""
+  external-hostname:
+    type: string
+    description: >
+      Override the default hostname (charm app name) for the ingress to listen on.
+    default: ""
+  ingress-strip-url-prefix:
+    type: string
+    description: |
+      Tell the ingress to strip url prefix before passing the request to the Spring Boot application.
+      For example, when set to "/foo":    
+        request "example.com/foo" will be rewritten to "example.com/"
+        request "example.com/foo/" will be rewritten to "example.com/"
+        request "example.com/foo/bar" will be rewritten to "example.com/bar"
+    default: ""
