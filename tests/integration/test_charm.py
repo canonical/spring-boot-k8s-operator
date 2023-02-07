@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 
+import ops.model
 import pytest
 import requests
 from pytest_operator.plugin import OpsTest
@@ -19,6 +20,7 @@ BUILDPACK_APP_NAME = f"{APP_NAME}-buildpack"
 MEM_1G_APP_NAME = f"{APP_NAME}-1g"
 MEM_1G_BUILDPACK_APP_NAME = f"{BUILDPACK_APP_NAME}-1g"
 ALL_APP_NAMES = [APP_NAME, BUILDPACK_APP_NAME, MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]
+NGINX_INGRESS_NAME = "nginx-ingress-integrator"
 
 
 @pytest.mark.abort_on_fail
@@ -31,8 +33,12 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
     assert ops_test.model
     # Build and deploy charm from local source folder
     charm = await ops_test.build_charm(".")
-    executable_jar_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0"}
-    buildpack_resources = {"spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered"}
+    executable_jar_resources = {
+        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0@sha256:abbefdcedbb196a5744fb1c61f3d3fc166ea4b0eb46e5c6321fc7d7cdb73470c"
+    }
+    buildpack_resources = {
+        "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-layered@sha256:554c28af2949fdf816e35ac29950b36a9e2ecf4ed39b133de3483cc5c4fbd5b4"
+    }
     # Deploy the charm and wait for idle
     await asyncio.gather(
         ops_test.model.deploy(
@@ -58,8 +64,9 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
             series="jammy",
             constraints={"mem": 512},
         ),
+        ops_test.model.deploy(NGINX_INGRESS_NAME, series="focal", trust=True),
         ops_test.model.wait_for_idle(
-            apps=ALL_APP_NAMES,
+            apps=ALL_APP_NAMES + [NGINX_INGRESS_NAME],
             status="active",
         ),
     )
@@ -171,3 +178,52 @@ async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
                 "Invalid jvm-config, "
                 "Java heap memory specification exceeds application memory constraint"
             )
+    await asyncio.gather(
+        *(
+                [
+                    ops_test.model.applications[app_name].set_config({"jvm-config": ""})
+                    for app_name in ALL_APP_NAMES
+                ]
+                + [ops_test.model.wait_for_idle(apps=ALL_APP_NAMES)]
+        )
+    )
+
+
+async def test_nginx_ingress(ops_test: OpsTest) -> None:
+    """
+    arrange: deploy Spring Boot applications.
+    act: relate the Spring Boot application charm with Nginx ingress integrator charm, and update
+        ingress related charm configuration.
+    assert: Nginx ingress integrator charm should create ingress resources in Kubernetes cluster
+        for the Spring Boot charm accordingly.
+    """
+    assert ops_test.model
+    await ops_test.model.add_relation(APP_NAME, NGINX_INGRESS_NAME)
+    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+
+    response = requests.get("http://127.0.0.1/hello-world", headers={"Host": APP_NAME}, timeout=5)
+    assert response.status_code == 200
+    assert "world" in response.text.lower()
+
+    new_hostname = "new-hostname"
+    application = ops_test.model.applications[APP_NAME]
+    await application.set_config({"external-hostname": new_hostname})
+    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+    response = requests.get(
+        "http://127.0.0.1/hello-world", headers={"Host": new_hostname}, timeout=5
+    )
+    assert response.status_code == 200
+    assert "world" in response.text.lower()
+
+    # The default value of Nginx ingress integrator charm configuration rewrite-target will
+    # prevent changes from relation. This is a temporary fix, please remove this once this
+    # problem is fixed in Nginx ingress integrator charm.
+    await ops_test.model.applications[NGINX_INGRESS_NAME].set_config({"rewrite-target": ""})
+
+    await application.set_config({"ingress-strip-url-prefix": "/foo"})
+    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+    response = requests.get(
+        "http://127.0.0.1/foo/hello-world", headers={"Host": new_hostname}, timeout=5
+    )
+    assert response.status_code == 200
+    assert "world" in response.text.lower()
