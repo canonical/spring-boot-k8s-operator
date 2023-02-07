@@ -105,12 +105,10 @@ class SpringBootCharm(CharmBase):
                     # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
                     database_name = data.get("database", self.database.database)
                     endpoint = data["endpoints"].split(",")[0]
-                    host = endpoint.split(":")[0]
-                    port = endpoint.split(":")[1]
                     return {
                         "username": data["username"],
                         "password": data["password"],
-                        "url": f"jdbc:mysql://{host}:{port}/{database_name}",
+                        "url": f"jdbc:mysql://{endpoint}/{database_name}",
                     }
         return {
             "username": "",
