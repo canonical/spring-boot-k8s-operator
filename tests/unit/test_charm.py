@@ -310,7 +310,7 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     assert isinstance(harness.model.unit.status, ActiveStatus)
 
 
-def test_nginx_ingress(harness: Harness, patch: SpringBootPatch):
+def test_ingress(harness: Harness, patch: SpringBootPatch):
     """
     arrange: provide a simulated Spring Boot application image.
     act: update charm's ingress configuration.

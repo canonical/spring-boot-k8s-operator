@@ -20,7 +20,7 @@ BUILDPACK_APP_NAME = f"{APP_NAME}-buildpack"
 MEM_1G_APP_NAME = f"{APP_NAME}-1g"
 MEM_1G_BUILDPACK_APP_NAME = f"{BUILDPACK_APP_NAME}-1g"
 ALL_APP_NAMES = [APP_NAME, BUILDPACK_APP_NAME, MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]
-NGINX_INGRESS_NAME = "nginx-ingress-integrator"
+INGRESS_NAME = "nginx-ingress-integrator"
 
 
 @pytest.mark.abort_on_fail
@@ -60,9 +60,9 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
             series="jammy",
             constraints={"mem": 512},
         ),
-        ops_test.model.deploy(NGINX_INGRESS_NAME, series="focal", trust=True),
+        ops_test.model.deploy(INGRESS_NAME, series="focal", trust=True),
         ops_test.model.wait_for_idle(
-            apps=ALL_APP_NAMES + [NGINX_INGRESS_NAME],
+            apps=ALL_APP_NAMES + [INGRESS_NAME],
             status="active",
         ),
     )
@@ -185,16 +185,16 @@ async def test_invalid_jvm_config(ops_test: OpsTest) -> None:
     )
 
 
-async def test_nginx_ingress(ops_test: OpsTest) -> None:
+async def test_ingress(ops_test: OpsTest) -> None:
     """
     arrange: deploy Spring Boot applications.
-    act: relate the Spring Boot application charm with Nginx ingress integrator charm, and update
+    act: relate the Spring Boot application charm with ingress integrator charm, and update
         ingress related charm configuration.
-    assert: Nginx ingress integrator charm should create ingress resources in Kubernetes cluster
-        for the Spring Boot charm accordingly.
+    assert: Ingress integrator charm should create ingress resources in Kubernetes cluster for the
+        Spring Boot charm accordingly.
     """
     assert ops_test.model
-    await ops_test.model.add_relation(APP_NAME, NGINX_INGRESS_NAME)
+    await ops_test.model.add_relation(APP_NAME, INGRESS_NAME)
     await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
 
     response = requests.get("http://127.0.0.1/hello-world", headers={"Host": APP_NAME}, timeout=5)
@@ -214,7 +214,7 @@ async def test_nginx_ingress(ops_test: OpsTest) -> None:
     # The default value of Nginx ingress integrator charm configuration rewrite-target will
     # prevent changes from relation. This is a temporary fix, please remove this once this
     # problem is fixed in Nginx ingress integrator charm.
-    await ops_test.model.applications[NGINX_INGRESS_NAME].set_config({"rewrite-target": ""})
+    await ops_test.model.applications[INGRESS_NAME].set_config({"rewrite-target": ""})
 
     await application.set_config({"ingress-strip-url-prefix": "/foo"})
     await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
