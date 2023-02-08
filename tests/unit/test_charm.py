@@ -335,7 +335,39 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     assert isinstance(harness.model.unit.status, ActiveStatus)
 
 
-def test_datasource(harness: Harness, patch: SpringBootPatch):
+@pytest.mark.parametrize(
+    "relation_data, expected_output",
+    [
+        (
+            {
+                "endpoints": "test-mysql:3306",
+                "password": "test-password",
+                "username": "test-username",
+            },
+            {
+                "url": "jdbc:mysql://test-mysql:3306/spring-boot",
+                "password": "test-password",
+                "username": "test-username",
+            },
+        ),
+        (
+            {
+                "database": "test-database",
+                "endpoints": "test-mysql:3306,test-mysql-2:3306",
+                "password": "test-password",
+                "username": "test-username",
+            },
+            {
+                "url": "jdbc:mysql://test-mysql:3306/test-database",
+                "password": "test-password",
+                "username": "test-username",
+            },
+        ),
+    ],
+)
+def test_datasource(
+    harness: Harness, patch: SpringBootPatch, relation_data: dict, expected_output: dict
+):
     """
     arrange: provide a simulated Spring Boot application image.
     act: start the charm and a database. Integrates the db to the charm.
@@ -353,32 +385,5 @@ def test_datasource(harness: Harness, patch: SpringBootPatch):
 
     mysql_relation_id: int = harness.add_relation("mysql", "mysql-k8s")
 
-    # Simulate sharing the credentials of a new created database.
-    # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/README.md#example
-    mysql_host = "mysql"
-    mysql_port = 3306
-
-    # Test without the database name provided by the provider
-    # This implies that the default "spring-boot" name was used
-    rel_data = {
-        "endpoints": f"{mysql_host}:{mysql_port}",
-        "password": "test-password",
-        "username": "test-username",
-    }
-    harness.update_relation_data(mysql_relation_id, "mysql-k8s", rel_data)
-    assert harness.charm._datasource() == {
-        "password": rel_data["password"],
-        "username": rel_data["username"],
-        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/spring-boot",
-    }
-
-    # Now we add a database name given by the provider
-    rel_data_update = {
-        "database": "test-database",
-    }
-    harness.update_relation_data(mysql_relation_id, "mysql-k8s", rel_data_update)
-    assert harness.charm._datasource() == {
-        "password": rel_data["password"],
-        "username": rel_data["username"],
-        "url": f"jdbc:mysql://{mysql_host}:{mysql_port}/{rel_data_update['database']}",
-    }
+    harness.update_relation_data(mysql_relation_id, "mysql-k8s", relation_data)
+    assert harness.charm._datasource() == expected_output
