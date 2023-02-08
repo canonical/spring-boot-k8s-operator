@@ -22,6 +22,8 @@ MEM_1G_BUILDPACK_APP_NAME = f"{BUILDPACK_APP_NAME}-1g"
 ALL_APP_NAMES = [APP_NAME, BUILDPACK_APP_NAME, MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]
 INGRESS_NAME = "nginx-ingress-integrator"
 
+ACTIVE_STATUS: str = ops.model.ActiveStatus.name  # type: ignore
+
 
 @pytest.mark.abort_on_fail
 async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
@@ -195,7 +197,7 @@ async def test_ingress(ops_test: OpsTest) -> None:
     """
     assert ops_test.model
     await ops_test.model.add_relation(APP_NAME, INGRESS_NAME)
-    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+    await ops_test.model.wait_for_idle(status=ACTIVE_STATUS)
 
     response = requests.get("http://127.0.0.1/hello-world", headers={"Host": APP_NAME}, timeout=5)
     assert response.status_code == 200
@@ -204,7 +206,7 @@ async def test_ingress(ops_test: OpsTest) -> None:
     new_hostname = "new-hostname"
     application = ops_test.model.applications[APP_NAME]
     await application.set_config({"ingress-hostname": new_hostname})
-    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+    await ops_test.model.wait_for_idle(status=ACTIVE_STATUS)
     response = requests.get(
         "http://127.0.0.1/hello-world", headers={"Host": new_hostname}, timeout=5
     )
@@ -217,7 +219,7 @@ async def test_ingress(ops_test: OpsTest) -> None:
     await ops_test.model.applications[INGRESS_NAME].set_config({"rewrite-target": ""})
 
     await application.set_config({"ingress-strip-url-prefix": "/foo"})
-    await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
+    await ops_test.model.wait_for_idle(status=ACTIVE_STATUS)
     response = requests.get(
         "http://127.0.0.1/foo/hello-world", headers={"Host": new_hostname}, timeout=5
     )
