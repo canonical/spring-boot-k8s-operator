@@ -389,9 +389,7 @@ def test_datasource(
     assert harness.charm._datasource() == expected_output
 
 
-def test_buildpack_app_with_mysql_capability(
-    harness: Harness, patch: SpringBootPatch
-) -> None:
+def test_buildpack_app_with_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
         buildpack.
@@ -411,9 +409,7 @@ def test_buildpack_app_with_mysql_capability(
     assert harness.charm._detect_mysql_capability()
 
 
-def test_buildpack_app_with_no_mysql_capability(
-    harness: Harness, patch: SpringBootPatch
-) -> None:
+def test_buildpack_app_with_no_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
         buildpack.
@@ -439,15 +435,13 @@ def test_executable_jar_with_no_mysql_capability(harness: Harness, patch: Spring
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
     patch.start(
-        {
-            "spring-boot-app": OCIImageMock.builder()
-            .add_file("/app/test.jar", b"")
-            .build()
-        },
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
         container_mock_callback={
             "spring-boot-app": lambda container: container.process_mock.register_command_handler(
                 lambda command: command[0] == "jar",
-                lambda command, environment: (0, """
+                lambda command, environment: (
+                    0,
+                    """
                     META-INF/
                     META-INF/MANIFEST.MF
                     org/
@@ -457,7 +451,9 @@ def test_executable_jar_with_no_mysql_capability(harness: Harness, patch: Spring
                     BOOT-INF/classes/com/canonical/sampleapp/Application.class
                     BOOT-INF/lib/
                     BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar
-                """, ""),
+                """,
+                    "",
+                ),
             )
         },
     )
@@ -472,15 +468,13 @@ def test_executable_jar_with_mysql_capability(harness: Harness, patch: SpringBoo
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
     patch.start(
-        {
-            "spring-boot-app": OCIImageMock.builder()
-            .add_file("/app/test.jar", b"")
-            .build()
-        },
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
         container_mock_callback={
             "spring-boot-app": lambda container: container.process_mock.register_command_handler(
                 lambda command: command[0] == "jar",
-                lambda command, environment: (0, """
+                lambda command, environment: (
+                    0,
+                    """
                     META-INF/
                     META-INF/MANIFEST.MF
                     org/
@@ -491,7 +485,9 @@ def test_executable_jar_with_mysql_capability(harness: Harness, patch: SpringBoo
                     BOOT-INF/lib/
                     BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar
                     BOOT-INF/lib/mysql-connector-j-2.19.0.jar
-                """, ""),
+                """,
+                    "",
+                ),
             )
         },
     )
