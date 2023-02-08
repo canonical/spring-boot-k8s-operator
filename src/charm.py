@@ -44,9 +44,9 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
-        self.ingress = IngressRequires(self, self._ingress_config())
+        self.ingress = IngressRequires(self, self._nginx_ingress_config())
 
-    def _ingress_config(self) -> typing.Dict[str, str]:
+    def _nginx_ingress_config(self) -> typing.Dict[str, str]:
         """Generate ingress configuration based on the Sprint Boot application and charm configs.
 
         Returns:
@@ -363,7 +363,7 @@ class SpringBootCharm(CharmBase):
         try:
             logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
-            self.ingress.update_config(self._ingress_config())
+            self.ingress.update_config(self._nginx_ingress_config())
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
             logger.debug("Finish reconciliation, triggered by %s", event)
