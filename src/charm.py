@@ -53,7 +53,7 @@ class SpringBootCharm(CharmBase):
             A dictionary containing the ingress configuration.
         """
         config = {
-            "service-hostname": self.model.config["external-hostname"] or self.app.name,
+            "service-hostname": self.model.config["ingress-hostname"] or self.app.name,
             "service-name": self.app.name,
             "service-port": str(self._spring_boot_port()),
         }

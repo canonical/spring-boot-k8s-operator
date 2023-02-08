@@ -203,7 +203,7 @@ async def test_ingress(ops_test: OpsTest) -> None:
 
     new_hostname = "new-hostname"
     application = ops_test.model.applications[APP_NAME]
-    await application.set_config({"external-hostname": new_hostname})
+    await application.set_config({"ingress-hostname": new_hostname})
     await ops_test.model.wait_for_idle(status=ops.model.ActiveStatus.name)  # type: ignore
     response = requests.get(
         "http://127.0.0.1/hello-world", headers={"Host": new_hostname}, timeout=5

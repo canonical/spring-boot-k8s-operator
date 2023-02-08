@@ -334,7 +334,7 @@ def test_ingress(harness: Harness, patch: SpringBootPatch):
         "service-name": "spring-boot-k8s",
         "service-port": "8080",
     }
-    harness.update_config({"external-hostname": "new-hostname"})
+    harness.update_config({"ingress-hostname": "new-hostname"})
     relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
     assert relation_data["host"] == "new-hostname"
     harness.update_config({"ingress-strip-url-prefix": "/foo"})
