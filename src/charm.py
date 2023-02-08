@@ -16,7 +16,7 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ExecError
+from ops.pebble import ExecError, FileInfo
 
 from charm_types import ExecResult
 from exceptions import ReconciliationError
@@ -290,7 +290,7 @@ class SpringBootCharm(CharmBase):
             True if the mysql lib is present, False otherwise.
 
         Raises:
-            Exception: If the spring-boot app has a not recognizable type.
+            TypeError: If the spring-boot app has a not recognizable type.
         """
         java_app = self._detect_java_application()
         container = self._spring_boot_container()
@@ -301,23 +301,39 @@ class SpringBootCharm(CharmBase):
             except FileNotFoundError:
                 return False
 
-            def is_file_mysql_connector(file):
+            def is_file_mysql_lib(file: FileInfo) -> bool:
+                """Check if the file is a mysql-conector lib.
+
+                Args:
+                    file: FileInfo to file to be checked
+
+                Returns:
+                    True if it is, False otherwise
+                """
                 return file.name.endswith(".jar") and file.name.startswith("mysql-connector-j-")
 
-            return any(filter(is_file_mysql_connector, files))
+            return any(True for file in files if is_file_mysql_lib(file))
 
         if isinstance(java_app, ExecutableJarApplication):
             process = container.exec(["jar", "-t", "--file", java_app.executable_jar_path])
             _output, _ = process.wait_output()
             output = _output.splitlines()
 
-            def is_file_mysql_connector(path):
+            def is_path_to_mysql_lib(path: str) -> bool:
+                """Check if the file is a mysql-conector lib.
+
+                Args:
+                    path: path to file to be checked
+
+                Returns:
+                    True if it is, False otherwise
+                """
                 file = path.split("/")[-1]
                 return file.endswith(".jar") and file.startswith("mysql-connector-j-")
 
-            return any(filter(is_file_mysql_connector, output))
+            return any(True for path in output if is_path_to_mysql_lib(path))
 
-        raise Exception("Unknown application type")
+        raise TypeError("Unknown application type")
 
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
