@@ -94,12 +94,7 @@ class SpringBootCharm(CharmBase):
 
         # Let's check that the relation data is well formed according to the following json_schema:
         # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
-        if not (
-            all(key in data for key in ("endpoints", "username", "password"))
-            and data["endpoints"]
-            and data["username"]
-            and data["password"]
-        ):
+        if not all(data.get(key) for key in ("endpoints", "username", "password")):
             logger.warning("Incorrect relation data from the data provider: %s", data)
             return default
 
