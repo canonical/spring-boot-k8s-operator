@@ -16,7 +16,7 @@ from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
-from ops.pebble import ExecError, FileInfo
+from ops.pebble import ExecError
 
 from charm_types import ExecResult
 from exceptions import ReconciliationError
@@ -301,37 +301,19 @@ class SpringBootCharm(CharmBase):
             except FileNotFoundError:
                 return False
 
-            def is_file_mysql_lib(file: FileInfo) -> bool:
-                """Check if the file is a mysql-conector lib.
-
-                Args:
-                    file: FileInfo to file to be checked
-
-                Returns:
-                    True if it is, False otherwise
-                """
-                return file.name.endswith(".jar") and file.name.startswith("mysql-connector-j-")
-
-            return any(True for file in files if is_file_mysql_lib(file))
+            return any(
+                file.name.startswith("mysql-connector-j-") and file.name.endswith(".jar")
+                for file in files
+            )
 
         if isinstance(java_app, ExecutableJarApplication):
             process = container.exec(["jar", "-t", "--file", java_app.executable_jar_path])
-            _output, _ = process.wait_output()
-            output = _output.splitlines()
+            output, _ = process.wait_output()
 
-            def is_path_to_mysql_lib(path: str) -> bool:
-                """Check if the file is a mysql-conector lib.
-
-                Args:
-                    path: path to file to be checked
-
-                Returns:
-                    True if it is, False otherwise
-                """
-                file = path.split("/")[-1]
-                return file.endswith(".jar") and file.startswith("mysql-connector-j-")
-
-            return any(True for path in output if is_path_to_mysql_lib(path))
+            return any(
+                filename.startswith("mysql-connector-j-") and filename.endswith(".jar")
+                for filename in (path.split("/")[-1] for path in output.splitlines())
+            )
 
         raise TypeError("Unknown application type")
 
