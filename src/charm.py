@@ -45,7 +45,9 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
-        self.database: DatabaseRequires = self._setup_database_requirer("mysql", "spring-boot")
+        self.database_provider: DatabaseRequires = self._setup_database_requirer(
+            "mysql", "spring-boot"
+        )
 
     def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
         """Set up a DatabaseRequires instance.
@@ -82,14 +84,16 @@ class SpringBootCharm(CharmBase):
             "url": "",
         }
 
-        relations_data = list(self.database.fetch_relation_data().values())
+        relations_data = list(self.database_provider.fetch_relation_data().values())
 
         if not relations_data:
-            logger.warning("No relation data from data provider: %s", self.database.database)
+            logger.warning(
+                "No relation data from data provider: %s", self.database_provider.database
+            )
             return default
 
         # There can be only one database integrated at a time
-        # cf: metadata.yaml
+        # see: metadata.yaml
         data = relations_data[0]
 
         # Let's check that the relation data is well formed according to the following json_schema:
@@ -98,7 +102,7 @@ class SpringBootCharm(CharmBase):
             logger.warning("Incorrect relation data from the data provider: %s", data)
             return default
 
-        database_name = data.get("database", self.database.database)
+        database_name = data.get("database", self.database_provider.database)
         endpoint = data["endpoints"].split(",")[0]
         return {
             "username": data["username"],
@@ -279,6 +283,40 @@ class SpringBootCharm(CharmBase):
             env[JAVA_TOOL_OPTIONS] = jvm_config
         return env
 
+    def _detect_mysql_capability(self) -> bool:
+        """Detect if the mysql lib is present in the spring-boot app.
+
+        Returns:
+            True if the mysql lib is present, False otherwise.
+
+        Raises:
+            TypeError: If the spring-boot app has a not recognizable type.
+        """
+        java_app = self._detect_java_application()
+        container = self._spring_boot_container()
+
+        if isinstance(java_app, BuildpackApplication):
+            try:
+                files = container.list_files("/workspace/BOOT-INF/lib")
+            except FileNotFoundError:
+                return False
+
+            return any(
+                file.name.startswith("mysql-connector-j-") and file.name.endswith(".jar")
+                for file in files
+            )
+
+        if isinstance(java_app, ExecutableJarApplication):
+            process = container.exec(["jar", "-t", "--file", java_app.executable_jar_path])
+            output, _ = process.wait_output()
+
+            return any(
+                filename.startswith("mysql-connector-j-") and filename.endswith(".jar")
+                for filename in (path.split("/")[-1] for path in output.splitlines())
+            )
+
+        raise TypeError("Unknown application type")
+
     def _detect_java_application(self) -> ExecutableJarApplication | BuildpackApplication:
         """Detect the type of the Java application inside the Spring Boot application image.
 
@@ -345,7 +383,7 @@ class SpringBootCharm(CharmBase):
                 }
             },
             "checks": {
-                "wordpress-ready": {
+                "spring-boot-ready": {
                     "override": "replace",
                     "level": "alive",
                     "http": {

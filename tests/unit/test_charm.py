@@ -69,7 +69,7 @@ def test_spring_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> N
             }
         },
         "checks": {
-            "wordpress-ready": {
+            "spring-boot-ready": {
                 "override": "replace",
                 "level": "alive",
                 "http": {"url": "http://localhost:8080/actuator/health"},
@@ -171,7 +171,7 @@ def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
     harness.set_can_connect(harness.model.unit.containers["spring-boot-app"], True)
     harness.update_config({"application-config": json.dumps({"server": {"port": 8888}})})
     assert harness.charm._generate_spring_boot_layer()["checks"] == {
-        "wordpress-ready": {
+        "spring-boot-ready": {
             "override": "replace",
             "level": "alive",
             "http": {"url": "http://localhost:8888/actuator/health"},
@@ -387,3 +387,109 @@ def test_datasource(
 
     harness.update_relation_data(mysql_relation_id, "mysql-k8s", relation_data)
     assert harness.charm._datasource() == expected_output
+
+
+def test_buildpack_app_with_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
+        buildpack.
+    act: start the charm.
+    assert: Spring Boot charm should finish the reconciliation process without an error.
+    """
+    patch.start(
+        {
+            "spring-boot-app": OCIImageMock.builder()
+            .add_file("/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java", b"")
+            .add_file("/workspace/org/springframework/boot/loader/JarLauncher.class", b"")
+            .add_file("/workspace/BOOT-INF/lib/mysql-connector-j-10.1.1.jar", b"")
+            .build()
+        }
+    )
+    harness.begin_with_initial_hooks()
+    assert harness.charm._detect_mysql_capability()
+
+
+def test_buildpack_app_with_no_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
+        buildpack.
+    act: start the charm.
+    assert: Spring Boot charm should finish the reconciliation process without an error.
+    """
+    patch.start(
+        {
+            "spring-boot-app": OCIImageMock.builder()
+            .add_file("/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java", b"")
+            .add_file("/workspace/org/springframework/boot/loader/JarLauncher.class", b"")
+            .build()
+        }
+    )
+    harness.begin_with_initial_hooks()
+    assert not harness.charm._detect_mysql_capability()
+
+
+def test_executable_jar_with_no_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
+    act: start the charm.
+    assert: Spring Boot charm should finish the reconciliation process without an error.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        container_mock_callback={
+            "spring-boot-app": lambda container: container.process_mock.register_command_handler(
+                lambda command: command[0] == "jar",
+                lambda command, environment: (
+                    0,
+                    """
+                    META-INF/
+                    META-INF/MANIFEST.MF
+                    org/
+                    org/springframework/boot/loader/
+                    org/springframework/boot/loader/ClassPathIndexFile.class
+                    BOOT-INF/classes/com/canonical/sampleapp/
+                    BOOT-INF/classes/com/canonical/sampleapp/Application.class
+                    BOOT-INF/lib/
+                    BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar
+                """,
+                    "",
+                ),
+            )
+        },
+    )
+    harness.begin_with_initial_hooks()
+    assert not harness.charm._detect_mysql_capability()
+
+
+def test_executable_jar_with_mysql_capability(harness: Harness, patch: SpringBootPatch) -> None:
+    """
+    arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
+    act: start the charm.
+    assert: Spring Boot charm should finish the reconciliation process without an error.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        container_mock_callback={
+            "spring-boot-app": lambda container: container.process_mock.register_command_handler(
+                lambda command: command[0] == "jar",
+                lambda command, environment: (
+                    0,
+                    """
+                    META-INF/
+                    META-INF/MANIFEST.MF
+                    org/
+                    org/springframework/boot/loader/
+                    org/springframework/boot/loader/ClassPathIndexFile.class
+                    BOOT-INF/classes/com/canonical/sampleapp/
+                    BOOT-INF/classes/com/canonical/sampleapp/Application.class
+                    BOOT-INF/lib/
+                    BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar
+                    BOOT-INF/lib/mysql-connector-j-2.19.0.jar
+                """,
+                    "",
+                ),
+            )
+        },
+    )
+    harness.begin_with_initial_hooks()
+    assert harness.charm._detect_mysql_capability()
