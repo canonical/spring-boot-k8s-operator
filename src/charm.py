@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """Spring Boot Charm service."""
@@ -8,9 +8,11 @@ import json
 import logging
 import re
 import typing
+from collections import defaultdict
 
 import kubernetes.client
 import ops.charm
+from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -43,6 +45,70 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
+        self.database_provider: DatabaseRequires = self._setup_database_requirer(
+            "mysql", "spring-boot"
+        )
+
+    def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
+        """Set up a DatabaseRequires instance.
+
+        The DatabaseRequires instance is an interface between the charm and various data providers.
+        It handles those relations and emit events to help us abstract these integrations.
+
+        Args:
+            relation_name: Name of the data relation
+            database_name: Name of the database (can be overwritten by the provider)
+
+        Returns:
+            DatabaseRequires object produced by the data_platform_libs.v0.data_interfaces library
+        """
+        database_requirer = DatabaseRequires(
+            self,
+            relation_name=relation_name,
+            database_name=database_name,
+        )
+        self.framework.observe(database_requirer.on.database_created, self.reconciliation)
+        self.framework.observe(self.on[relation_name].relation_broken, self.reconciliation)
+        return database_requirer
+
+    def _datasource(self) -> dict[str, str]:
+        """Compute datasource dict and return it.
+
+        Returns:
+            Dict containing details about the data provider integration
+        """
+        # Default results when something went wrong
+        default = {
+            "username": "",
+            "password": "",
+            "url": "",
+        }
+
+        relations_data = list(self.database_provider.fetch_relation_data().values())
+
+        if not relations_data:
+            logger.warning(
+                "No relation data from data provider: %s", self.database_provider.database
+            )
+            return default
+
+        # There can be only one database integrated at a time
+        # see: metadata.yaml
+        data = relations_data[0]
+
+        # Let's check that the relation data is well formed according to the following json_schema:
+        # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
+        if not all(data.get(key) for key in ("endpoints", "username", "password")):
+            logger.warning("Incorrect relation data from the data provider: %s", data)
+            return default
+
+        database_name = data.get("database", self.database_provider.database)
+        endpoint = data["endpoints"].split(",")[0]
+        return {
+            "username": data["username"],
+            "password": data["password"],
+            "url": f"jdbc:mysql://{endpoint}/{database_name}",
+        }
 
     def _application_config(self) -> dict | None:
         """Decode the value of the charm configuration application-config.
@@ -57,8 +123,9 @@ class SpringBootCharm(CharmBase):
             config = self.model.config["application-config"]
             if not config:
                 return None
-            application_config = json.loads(config)
+            application_config = json.loads(config, object_hook=lambda d: defaultdict(dict, d))
             if isinstance(application_config, dict):
+                application_config["spring"]["datasource"] = self._datasource()
                 return application_config
             logger.error("Invalid application-config value: %s", repr(config))
             raise ReconciliationError(
@@ -75,7 +142,7 @@ class SpringBootCharm(CharmBase):
         """Get the Spring Boot application server port, default to 8080.
 
         Returns:
-            Sprint Boot server port.
+            Spring Boot server port.
 
         Raises:
             ReconciliationError: server port is provided in application-config but the value is
@@ -179,7 +246,7 @@ class SpringBootCharm(CharmBase):
         java_heap_maximum_memory = self._parse_human_readable_units(
             self._regex_find_last("(?:^|\\s)-Xmx(\\d+[kmgtKMGT]?)\\b", config, "0")
         )
-        container_memory_limit = self._get_sprint_boot_container_memory_constraint()
+        container_memory_limit = self._get_spring_boot_container_memory_constraint()
         if (
             container_memory_limit
             and max(java_heap_maximum_memory, java_heap_initial_memory) > container_memory_limit
@@ -201,7 +268,7 @@ class SpringBootCharm(CharmBase):
             raise ReconciliationError(new_status=BlockedStatus("Invalid jvm-config"))
         return config
 
-    def _sprint_boot_env(self) -> typing.Dict[str, str]:
+    def _spring_boot_env(self) -> typing.Dict[str, str]:
         """Generate environment variables for the Spring Boot application process.
 
         Returns:
@@ -276,7 +343,7 @@ class SpringBootCharm(CharmBase):
                 "spring-boot-app": {
                     "override": "replace",
                     "summary": "Spring Boot application service",
-                    "environment": self._sprint_boot_env(),
+                    "environment": self._spring_boot_env(),
                     "command": " ".join(command),
                     "startup": "enabled",
                 }
@@ -292,7 +359,7 @@ class SpringBootCharm(CharmBase):
             },
         }
 
-    def _get_sprint_boot_container_memory_constraint(self) -> typing.Optional[int]:
+    def _get_spring_boot_container_memory_constraint(self) -> typing.Optional[int]:
         """Get the spring-boot-app container memory limit.
 
         Return:

@@ -24,3 +24,9 @@ resources:
 
 assumes:
   - k8s-api
+
+requires:
+  mysql:
+    interface: mysql
+    limit: 1
+    optional: true
