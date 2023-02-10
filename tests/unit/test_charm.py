@@ -393,24 +393,24 @@ def test_datasource(
     "files, expected",
     [
         (
-            [
+            (
                 "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java",
                 "/workspace/org/springframework/boot/loader/JarLauncher.class",
                 "/workspace/BOOT-INF/lib/mysql-connector-j-10.1.1.jar",
-            ],
+            ),
             True,
         ),
         (
-            [
+            (
                 "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java",
                 "/workspace/org/springframework/boot/loader/JarLauncher.class",
-            ],
+            ),
             False,
         ),
     ],
 )
 def test_buildpack_app_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: list[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: set[str], expected: bool
 ) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
@@ -418,11 +418,13 @@ def test_buildpack_app_mysql_capability(
     act: start the charm.
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
-    app = OCIImageMock.builder()
+    app_builder = OCIImageMock.builder()
     for file in files:
-        app.add_file(file, b"")
-    patch.start({"spring-boot-app": app.build()})
+        app_builder.add_file(file, b"")
+    patch.start({"spring-boot-app": app_builder.build()})
+
     harness.begin_with_initial_hooks()
+
     assert (
         harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
     )
@@ -432,7 +434,7 @@ def test_buildpack_app_mysql_capability(
     "files, expected",
     [
         (
-            [
+            (
                 "META-INF/",
                 "META-INF/MANIFEST.MF",
                 "org/",
@@ -443,11 +445,11 @@ def test_buildpack_app_mysql_capability(
                 "BOOT-INF/lib/",
                 "BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar",
                 "BOOT-INF/lib/mysql-connector-j-2.19.0.jar",
-            ],
+            ),
             True,
         ),
         (
-            [
+            (
                 "META-INF/",
                 "META-INF/MANIFEST.MF",
                 "org/",
@@ -457,13 +459,13 @@ def test_buildpack_app_mysql_capability(
                 "BOOT-INF/classes/com/canonical/sampleapp/Application.class",
                 "BOOT-INF/lib/",
                 "BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar",
-            ],
+            ),
             False,
         ),
     ],
 )
 def test_executable_jar_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: list[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: set[str], expected: bool
 ) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
@@ -483,7 +485,9 @@ def test_executable_jar_mysql_capability(
             )
         },
     )
+
     harness.begin_with_initial_hooks()
+
     assert (
         harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
     )
