@@ -7,7 +7,6 @@
 import json
 import logging
 import re
-import socket
 import typing
 
 import kubernetes.client
@@ -54,14 +53,9 @@ class SpringBootCharm(CharmBase):
             A dictionary containing the ingress configuration.
         """
         config = {
-            "service-hostname": socket.getfqdn(),
+            "service-hostname": self.model.config["ingress-hostname"] or self.app.name,
             "service-name": self.app.name,
             "service-port": str(self._spring_boot_port()),
-            "service-namespace": self.model.name,
-            "host": socket.getfqdn(),
-            "name": self.app.name,
-            "port": str(self._spring_boot_port()),
-            "model": self.model.name
         }
         remove_prefix = self.model.config["ingress-strip-url-prefix"]
         if remove_prefix:
@@ -70,7 +64,6 @@ class SpringBootCharm(CharmBase):
                     "rewrite-enabled": "true",
                     "rewrite-target": "/$2",
                     "path-routes": f"{remove_prefix}(/|$)(.*)",
-                    "strip-prefix": remove_prefix
                 }
             )
         return config
