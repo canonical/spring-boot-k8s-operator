@@ -423,7 +423,9 @@ def test_buildpack_app_mysql_capability(
         app.add_file(file, b"")
     patch.start({"spring-boot-app": app.build()})
     harness.begin_with_initial_hooks()
-    assert harness.charm._detect_mysql_capability() == expected
+    assert (
+        harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
+    )
 
 
 @pytest.mark.parametrize(
@@ -482,4 +484,6 @@ def test_executable_jar_mysql_capability(
         },
     )
     harness.begin_with_initial_hooks()
-    assert harness.charm._detect_mysql_capability() == expected
+    assert (
+        harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
+    )
