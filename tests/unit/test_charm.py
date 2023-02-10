@@ -17,7 +17,7 @@ from unit.spring_boot_patch import OCIImageMock, SpringBootPatch
 import exceptions
 
 
-def test_sprint_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
+def test_spring_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: generate the Spring Boot container pebble layer configuration.
@@ -135,7 +135,7 @@ def test_java_application_type_detection_failure(harness: Harness, patch: Spring
     assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
 
 
-def test_sprint_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
+def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated Spring Boot application image.
     act: update the application-config to update the Spring Boot server port.
@@ -308,3 +308,43 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     harness.begin_with_initial_hooks()
     harness.container_pebble_ready("spring-boot-app")
     assert isinstance(harness.model.unit.status, ActiveStatus)
+
+
+def test_ingress(harness: Harness, patch: SpringBootPatch):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update charm's ingress configuration.
+    assert: the unit should update the ingress relation data accordingly.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+    )
+
+    harness.set_model_name("test")
+    ingress_relation_id = harness.add_relation("ingress", "ingress")
+    harness.add_relation_unit(ingress_relation_id, "ingress/0")
+    harness.set_leader()
+    harness.begin_with_initial_hooks()
+    harness.container_pebble_ready("spring-boot-app")
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data == {
+        "host": "spring-boot-k8s",
+        "name": "spring-boot-k8s",
+        "port": "8080",
+        "service-hostname": "spring-boot-k8s",
+        "service-name": "spring-boot-k8s",
+        "service-port": "8080",
+    }
+
+    harness.update_config({"ingress-hostname": "new-hostname"})
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data["host"] == "new-hostname"
+
+    harness.update_config({"ingress-strip-url-prefix": "/foo"})
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data["rewrite-enabled"] == "true"
+    assert relation_data["rewrite-target"] == "/$2"
+    assert relation_data["path-routes"] == "/foo(/|$)(.*)"
