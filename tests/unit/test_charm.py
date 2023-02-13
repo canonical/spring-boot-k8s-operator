@@ -335,6 +335,46 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     assert isinstance(harness.model.unit.status, ActiveStatus)
 
 
+def test_ingress(harness: Harness, patch: SpringBootPatch):
+    """
+    arrange: provide a simulated Spring Boot application image.
+    act: update charm's ingress configuration.
+    assert: the unit should update the ingress relation data accordingly.
+    """
+    patch.start(
+        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+    )
+
+    harness.set_model_name("test")
+    ingress_relation_id = harness.add_relation("ingress", "ingress")
+    harness.add_relation_unit(ingress_relation_id, "ingress/0")
+    harness.set_leader()
+    harness.begin_with_initial_hooks()
+    harness.container_pebble_ready("spring-boot-app")
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data == {
+        "host": "spring-boot-k8s",
+        "name": "spring-boot-k8s",
+        "port": "8080",
+        "service-hostname": "spring-boot-k8s",
+        "service-name": "spring-boot-k8s",
+        "service-port": "8080",
+    }
+
+    harness.update_config({"ingress-hostname": "new-hostname"})
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data["host"] == "new-hostname"
+
+    harness.update_config({"ingress-strip-url-prefix": "/foo"})
+    relation_data = harness.get_relation_data(ingress_relation_id, harness.model.app)
+
+    assert relation_data["rewrite-enabled"] == "true"
+    assert relation_data["rewrite-target"] == "/$2"
+    assert relation_data["path-routes"] == "/foo(/|$)(.*)"
+
+
 @pytest.mark.parametrize(
     "relation_data, expected_output",
     [
@@ -393,24 +433,24 @@ def test_datasource(
     "files, expected",
     [
         (
-            [
+            (
                 "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java",
                 "/workspace/org/springframework/boot/loader/JarLauncher.class",
                 "/workspace/BOOT-INF/lib/mysql-connector-j-10.1.1.jar",
-            ],
+            ),
             True,
         ),
         (
-            [
+            (
                 "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java",
                 "/workspace/org/springframework/boot/loader/JarLauncher.class",
-            ],
+            ),
             False,
         ),
     ],
 )
 def test_buildpack_app_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: list[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: tuple[str], expected: bool
 ) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
@@ -418,19 +458,23 @@ def test_buildpack_app_mysql_capability(
     act: start the charm.
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
-    app = OCIImageMock.builder()
+    app_builder = OCIImageMock.builder()
     for file in files:
-        app.add_file(file, b"")
-    patch.start({"spring-boot-app": app.build()})
+        app_builder.add_file(file, b"")
+    patch.start({"spring-boot-app": app_builder.build()})
+
     harness.begin_with_initial_hooks()
-    assert harness.charm._detect_mysql_capability() == expected
+
+    assert (
+        harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
+    )
 
 
 @pytest.mark.parametrize(
     "files, expected",
     [
         (
-            [
+            (
                 "META-INF/",
                 "META-INF/MANIFEST.MF",
                 "org/",
@@ -441,11 +485,11 @@ def test_buildpack_app_mysql_capability(
                 "BOOT-INF/lib/",
                 "BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar",
                 "BOOT-INF/lib/mysql-connector-j-2.19.0.jar",
-            ],
+            ),
             True,
         ),
         (
-            [
+            (
                 "META-INF/",
                 "META-INF/MANIFEST.MF",
                 "org/",
@@ -455,21 +499,22 @@ def test_buildpack_app_mysql_capability(
                 "BOOT-INF/classes/com/canonical/sampleapp/Application.class",
                 "BOOT-INF/lib/",
                 "BOOT-INF/lib/log4j-to-slf4j-2.19.0.jar",
-            ],
+            ),
             False,
         ),
     ],
 )
 def test_executable_jar_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: list[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: tuple[str], expected: bool
 ) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
     act: start the charm.
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
+    app = OCIImageMock.builder().add_file("/app/test.jar", b"").build()
     patch.start(
-        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        {"spring-boot-app": app},
         container_mock_callback={
             "spring-boot-app": lambda container: container.process_mock.register_command_handler(
                 lambda command: command[0] == "jar",
@@ -481,5 +526,9 @@ def test_executable_jar_mysql_capability(
             )
         },
     )
+
     harness.begin_with_initial_hooks()
-    assert harness.charm._detect_mysql_capability() == expected
+
+    assert (
+        harness.charm._detect_java_application().has_java_library("mysql-connector-j") == expected
+    )

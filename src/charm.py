@@ -13,6 +13,7 @@ from collections import defaultdict
 import kubernetes.client
 import ops.charm
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -48,6 +49,32 @@ class SpringBootCharm(CharmBase):
         self.database_provider: DatabaseRequires = self._setup_database_requirer(
             "mysql", "spring-boot"
         )
+        self.ingress = IngressRequires(self, self._nginx_ingress_config())
+        self.database_provider: DatabaseRequires = self._setup_database_requirer(
+            "mysql", "spring-boot"
+        )
+
+    def _nginx_ingress_config(self) -> typing.Dict[str, str]:
+        """Generate ingress configuration based on the Spring Boot application and charm configs.
+
+        Returns:
+            A dictionary containing the ingress configuration.
+        """
+        config = {
+            "service-hostname": self.model.config["ingress-hostname"] or self.app.name,
+            "service-name": self.app.name,
+            "service-port": str(self._spring_boot_port()),
+        }
+        remove_prefix = self.model.config["ingress-strip-url-prefix"]
+        if remove_prefix:
+            config.update(
+                {
+                    "rewrite-enabled": "true",
+                    "rewrite-target": "/$2",
+                    "path-routes": f"{remove_prefix}(/|$)(.*)",
+                }
+            )
+        return config
 
     def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
         """Set up a DatabaseRequires instance.
@@ -333,7 +360,7 @@ class SpringBootCharm(CharmBase):
         if container.exists(
             "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
         ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
-            return BuildpackApplication()
+            return BuildpackApplication(container)
         if container.isdir("/app"):
             files_in_app = container.list_files("/app")
             jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
@@ -345,7 +372,7 @@ class SpringBootCharm(CharmBase):
                     new_status=BlockedStatus("Multiple jar files found in /app")
                 )
             jar_file = jar_files[0]
-            return ExecutableJarApplication(executable_jar_path=f"/app/{jar_file}")
+            return ExecutableJarApplication(container, executable_jar_path=f"/app/{jar_file}")
         raise ReconciliationError(new_status=BlockedStatus("Unknown Java application type"))
 
     def _spring_boot_container(self) -> ops.model.Container:
@@ -440,6 +467,7 @@ class SpringBootCharm(CharmBase):
         try:
             logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
+            self.ingress.update_config(self._nginx_ingress_config())
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
             logger.debug("Finish reconciliation, triggered by %s", event)
