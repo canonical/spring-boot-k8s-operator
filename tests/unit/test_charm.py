@@ -512,8 +512,9 @@ def test_executable_jar_mysql_capability(
     act: start the charm.
     assert: Spring Boot charm should finish the reconciliation process without an error.
     """
+    app = OCIImageMock.builder().add_file("/app/test.jar", b"").build()
     patch.start(
-        {"spring-boot-app": OCIImageMock.builder().add_file("/app/test.jar", b"").build()},
+        {"spring-boot-app": app},
         container_mock_callback={
             "spring-boot-app": lambda container: container.process_mock.register_command_handler(
                 lambda command: command[0] == "jar",
