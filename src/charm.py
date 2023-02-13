@@ -46,12 +46,9 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
-        self.database_provider: DatabaseRequires = self._setup_database_requirer(
-            "mysql", "spring-boot"
-        )
         self.ingress = IngressRequires(self, self._nginx_ingress_config())
         self.database_provider: DatabaseRequires = self._setup_database_requirer(
-            "mysql", "spring-boot"
+            "database", "spring-boot"
         )
 
     def _nginx_ingress_config(self) -> typing.Dict[str, str]:

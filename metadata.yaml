@@ -27,8 +27,8 @@ requires:
     interface: ingress
     limit: 1
     optional: true
-  mysql:
-    interface: mysql
+  database:
+    interface: mysql_client
     limit: 1
     optional: true
 

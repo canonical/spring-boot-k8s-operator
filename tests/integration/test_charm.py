@@ -7,6 +7,7 @@
 import asyncio
 import json
 import logging
+import ops
 
 import ops.model
 import pytest
