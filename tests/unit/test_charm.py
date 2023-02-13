@@ -450,7 +450,7 @@ def test_datasource(
     ],
 )
 def test_buildpack_app_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: set[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: tuple[str], expected: bool
 ) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
@@ -505,7 +505,7 @@ def test_buildpack_app_mysql_capability(
     ],
 )
 def test_executable_jar_mysql_capability(
-    harness: Harness, patch: SpringBootPatch, files: set[str], expected: bool
+    harness: Harness, patch: SpringBootPatch, files: tuple[str], expected: bool
 ) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
