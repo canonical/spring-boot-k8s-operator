@@ -108,6 +108,11 @@ class SpringBootCharm(CharmBase):
             "url": "",
         }
 
+        # the database_requirer could not be defined
+        # if _datasource() is called before its initialization
+        if not hasattr(self, "database_requirer") or not self.database_requirer:
+            return default
+
         relations_data = list(self.database_requirer.fetch_relation_data().values())
 
         if not relations_data:
