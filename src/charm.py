@@ -47,7 +47,7 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
         self.ingress = IngressRequires(self, self._nginx_ingress_config())
-        self.database_provider: DatabaseRequires = self._setup_database_requirer(
+        self.database_requirer: DatabaseRequires = self._setup_database_requirer(
             "mysql", "spring-boot"
         )
 
@@ -108,11 +108,16 @@ class SpringBootCharm(CharmBase):
             "url": "",
         }
 
-        relations_data = list(self.database_provider.fetch_relation_data().values())
+        # the database_requirer could not be defined
+        # if _datasource() is called before its initialization
+        if not hasattr(self, "database_requirer") or not self.database_requirer:
+            return default
+
+        relations_data = list(self.database_requirer.fetch_relation_data().values())
 
         if not relations_data:
             logger.warning(
-                "No relation data from data provider: %s", self.database_provider.database
+                "No relation data from data provider: %s", self.database_requirer.database
             )
             return default
 
@@ -126,7 +131,7 @@ class SpringBootCharm(CharmBase):
             logger.warning("Incorrect relation data from the data provider: %s", data)
             return default
 
-        database_name = data.get("database", self.database_provider.database)
+        database_name = data.get("database", self.database_requirer.database)
         endpoint = data["endpoints"].split(",")[0]
         return {
             "username": data["username"],
@@ -323,7 +328,7 @@ class SpringBootCharm(CharmBase):
         if container.exists(
             "/layers/paketo-buildpacks_bellsoft-liberica/jre/bin/java"
         ) and container.exists("/workspace/org/springframework/boot/loader/JarLauncher.class"):
-            return BuildpackApplication()
+            return BuildpackApplication(container)
         if container.isdir("/app"):
             files_in_app = container.list_files("/app")
             jar_files = [file.name for file in files_in_app if file.name.endswith(".jar")]
@@ -335,7 +340,7 @@ class SpringBootCharm(CharmBase):
                     new_status=BlockedStatus("Multiple jar files found in /app")
                 )
             jar_file = jar_files[0]
-            return ExecutableJarApplication(executable_jar_path=f"/app/{jar_file}")
+            return ExecutableJarApplication(container, executable_jar_path=f"/app/{jar_file}")
         raise ReconciliationError(new_status=BlockedStatus("Unknown Java application type"))
 
     def _spring_boot_container(self) -> ops.model.Container:
@@ -373,7 +378,7 @@ class SpringBootCharm(CharmBase):
                 }
             },
             "checks": {
-                "wordpress-ready": {
+                "spring-boot-ready": {
                     "override": "replace",
                     "level": "alive",
                     "http": {

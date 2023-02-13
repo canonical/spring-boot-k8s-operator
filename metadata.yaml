@@ -27,12 +27,10 @@ requires:
     interface: ingress
     limit: 1
     optional: true
-
-assumes:
-  - k8s-api
-
-requires:
   mysql:
     interface: mysql
     limit: 1
     optional: true
+
+assumes:
+  - k8s-api
