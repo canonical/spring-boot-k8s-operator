@@ -22,11 +22,15 @@ resources:
     type: oci-image
     description: Spring Boot application image.
 
-assumes:
-  - k8s-api
-
 requires:
+  ingress:
+    interface: ingress
+    limit: 1
+    optional: true
   mysql:
     interface: mysql
     limit: 1
     optional: true
+
+assumes:
+  - k8s-api

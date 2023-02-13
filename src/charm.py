@@ -13,6 +13,7 @@ from collections import defaultdict
 import kubernetes.client
 import ops.charm
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
+from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
 from ops.charm import CharmBase, CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
@@ -45,9 +46,32 @@ class SpringBootCharm(CharmBase):
         super().__init__(*args)
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
+        self.ingress = IngressRequires(self, self._nginx_ingress_config())
         self.database_provider: DatabaseRequires = self._setup_database_requirer(
             "mysql", "spring-boot"
         )
+
+    def _nginx_ingress_config(self) -> typing.Dict[str, str]:
+        """Generate ingress configuration based on the Spring Boot application and charm configs.
+
+        Returns:
+            A dictionary containing the ingress configuration.
+        """
+        config = {
+            "service-hostname": self.model.config["ingress-hostname"] or self.app.name,
+            "service-name": self.app.name,
+            "service-port": str(self._spring_boot_port()),
+        }
+        remove_prefix = self.model.config["ingress-strip-url-prefix"]
+        if remove_prefix:
+            config.update(
+                {
+                    "rewrite-enabled": "true",
+                    "rewrite-target": "/$2",
+                    "path-routes": f"{remove_prefix}(/|$)(.*)",
+                }
+            )
+        return config
 
     def _setup_database_requirer(self, relation_name: str, database_name: str) -> DatabaseRequires:
         """Set up a DatabaseRequires instance.
@@ -406,6 +430,7 @@ class SpringBootCharm(CharmBase):
         try:
             logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
+            self.ingress.update_config(self._nginx_ingress_config())
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
             logger.debug("Finish reconciliation, triggered by %s", event)
