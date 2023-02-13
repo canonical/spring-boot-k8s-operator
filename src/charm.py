@@ -47,7 +47,7 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
         self.ingress = IngressRequires(self, self._nginx_ingress_config())
-        self.database_provider: DatabaseRequires = self._setup_database_requirer(
+        self.database_requirer: DatabaseRequires = self._setup_database_requirer(
             "mysql", "spring-boot"
         )
 
@@ -108,11 +108,11 @@ class SpringBootCharm(CharmBase):
             "url": "",
         }
 
-        relations_data = list(self.database_provider.fetch_relation_data().values())
+        relations_data = list(self.database_requirer.fetch_relation_data().values())
 
         if not relations_data:
             logger.warning(
-                "No relation data from data provider: %s", self.database_provider.database
+                "No relation data from data provider: %s", self.database_requirer.database
             )
             return default
 
@@ -126,7 +126,7 @@ class SpringBootCharm(CharmBase):
             logger.warning("Incorrect relation data from the data provider: %s", data)
             return default
 
-        database_name = data.get("database", self.database_provider.database)
+        database_name = data.get("database", self.database_requirer.database)
         endpoint = data["endpoints"].split(",")[0]
         return {
             "username": data["username"],
