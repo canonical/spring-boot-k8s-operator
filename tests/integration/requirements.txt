@@ -1,2 +1,3 @@
 ops >= 1.5.0
+juju>=2,<3
 pytest_operator
