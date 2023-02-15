@@ -116,9 +116,7 @@ class SpringBootCharm(CharmBase):
         relations_data = list(self.database_requirer.fetch_relation_data().values())
 
         if not relations_data:
-            logger.warning(
-                "No relation data from data provider: %s", self.database_requirer.database
-            )
+            logger.warning("No relation data from database provider")
             return default
 
         # There can be only one database integrated at a time
@@ -418,6 +416,23 @@ class SpringBootCharm(CharmBase):
             return 0
         return self._parse_human_readable_units(memory_limit.removesuffix("i"))
 
+    def _are_relations_ready(self) -> bool:
+        """Check if the needed relations are established.
+
+        Returns:
+            If the needed relations have been established.
+        """
+
+        if not hasattr(self, "database_requirer") or not self.database_requirer:
+            return False
+
+        relations_data = list(self.database_requirer.fetch_relation_data().values())
+        if not relations_data:
+            self.unit.status = WaitingStatus("Waiting for the database availability")
+            return False
+
+        return True
+
     def _service_reconciliation(self) -> None:
         """Run the reconciliation process for pebble services."""
         container = self._spring_boot_container()
@@ -430,6 +445,12 @@ class SpringBootCharm(CharmBase):
         Args:
             event: the charm event that triggers the reconciliation.
         """
+
+        # Check if necessary relations are ready before going further
+        if not self._are_relations_ready():
+            event.defer()
+            return
+
         try:
             logger.debug("Start reconciliation, triggered by %s", event)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
