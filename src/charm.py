@@ -55,8 +55,13 @@ class SpringBootCharm(PAASCharmBase):
             event (EventBase): Event that triggered the callback
             data (dict): Relation data
         """
-        self.app_data.update(data)
-        self.reconciliation()
+        self.app_data.update(
+            {
+                f"{event.relation.name}_{rel_name}": rel_data
+                for rel_name, rel_data in data[event.relation.name].items()
+            }
+        )
+        self.reconciliation(event)
 
     def _nginx_ingress_config(self) -> typing.Dict[str, str]:
         """Generate ingress configuration based on the Spring Boot application and charm configs.
@@ -89,9 +94,8 @@ class SpringBootCharm(PAASCharmBase):
             ReconciliationError: when application-config is invalid.
         """
         try:
-            config = self.model.config["application-config"]
-            if not config:
-                return None
+            config = self.model.config.get("application-config")
+
             application_config = json.loads(config, object_hook=lambda d: defaultdict(dict, d))
             if isinstance(application_config, dict):
                 application_config["spring"]["datasource"] = self._datasource()
@@ -119,33 +123,30 @@ class SpringBootCharm(PAASCharmBase):
             "url": "",
         }
 
-        if "mysql_client" not in self.app_data:
-            logger.warning("No relation data")
-            return default
-
-        relations_data = list(self.app_data["mysql_client"].values())
+        relation_data_prefix = "mysql_client_"
+        relations_data = {
+            k[len(relation_data_prefix) :]: v
+            for k, v in self.app_data.items()
+            if k.startswith(relation_data_prefix)
+        }
 
         if not relations_data:
-            logger.warning(
-                "No relation data from data provider: %s", self.app_data["mysql_client"].database
-            )
+            logger.warning("No relation data from data provider: mysql_client")
             return default
-
-        # There can be only one database integrated at a time
-        # see: metadata.yaml
-        data = relations_data[0]
 
         # Let's check that the relation data is well formed according to the following json_schema:
         # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
-        if not all(data.get(key) for key in ("endpoints", "username", "password")):
-            logger.warning("Incorrect relation data from the data provider: %s", data)
+        if not all(
+            relations_data.get(key) for key in ("endpoints", "username", "password", "database")
+        ):
+            logger.warning("Incorrect relation data from the data provider: %s", relations_data)
             return default
 
-        database_name = data.get("database", self.app_data["mysql_client"].database)
-        endpoint = data["endpoints"].split(",")[0]
+        database_name = relations_data.get("database")
+        endpoint = relations_data["endpoints"].split(",")[0]
         return {
-            "username": data["username"],
-            "password": data["password"],
+            "username": relations_data["username"],
+            "password": relations_data["password"],
             "url": f"jdbc:mysql://{endpoint}/{database_name}",
         }
 

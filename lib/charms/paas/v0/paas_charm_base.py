@@ -59,7 +59,7 @@ class PAASCharmBase(CharmBase):
         Args:
             event (EventBase): Event emitted that needs to be treated
         """
-        for wrapper_name, wrapper in self.wrappers:
+        for wrapper_name, wrapper in self.wrappers.items():
             if wrapper.must_run_on(event):
                 output = wrapper.run(event, self)
                 callback = getattr(self, WRAPPER_LIBRARY_MAP[wrapper_name]["callback"])

@@ -34,4 +34,6 @@ class MysqlClientWrapper:
         Returns:
             dict: A structured output that will be passed to the callback (for example diff of data)
         """
-        return {self.INTERFACE_NAME: self.database.fetch_relation_data()}
+        relation_data = self.database.fetch_relation_data()
+        relation_data[event.relation.id]["database"] = self.database.database
+        return {self.INTERFACE_NAME: relation_data[event.relation.id]}
