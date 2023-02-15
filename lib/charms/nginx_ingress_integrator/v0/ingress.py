@@ -127,6 +127,13 @@ class IngressBrokenEvent(RelationBrokenEvent):
     """
 
 
+class IngressCreatedEvent(EventBase):
+    """IngressCreatedEvent custom event.
+
+    This event indicates the Nginx ingress integrator charm made the ingress available.
+    """
+
+
 class IngressCharmEvents(CharmEvents):
     """Custom charm events.
 
@@ -139,6 +146,7 @@ class IngressCharmEvents(CharmEvents):
     ingress_available = EventSource(IngressAvailableEvent)
     ingress_proxy_available = EventSource(IngressProxyAvailableEvent)
     ingress_broken = EventSource(IngressBrokenEvent)
+    ingress_created = EventSource(IngressCreatedEvent)
 
 
 class IngressRequires(Object):
@@ -152,18 +160,19 @@ class IngressRequires(Object):
         config_dict: Contains all the configuration options for Ingress.
     """
 
-    def __init__(self, charm, config_dict):
+    on = IngressCharmEvents()
+
+    def __init__(self, charm, relation_name, config_dict):
         """Init function for the IngressRequires class.
 
         Args:
             charm: The charm that requires the ingress relation.
             config_dict: Contains all the configuration options for Ingress.
         """
-        super().__init__(charm, INGRESS_RELATION_NAME)
+        super().__init__(charm, relation_name)
 
-        self.framework.observe(
-            charm.on[INGRESS_RELATION_NAME].relation_changed, self._on_relation_changed
-        )
+        self.relation_name = relation_name
+        self.framework.observe(charm.on[relation_name].relation_changed, self._on_relation_changed)
 
         # Set default values.
         default_relation_fields = {
@@ -249,6 +258,7 @@ class IngressRequires(Object):
             event.relation.data[self.model.app].update(
                 (key, str(self.config_dict[key])) for key in self.config_dict
             )
+            self.on.ingress_created.emit()
 
     def update_config(self, config_dict: Dict) -> None:
         """Allow for updates to relation.
@@ -263,7 +273,7 @@ class IngressRequires(Object):
             self.config_dict = self._convert_to_relation_interface(config_dict)
             if self._config_dict_errors(self.config_dict, update_only=True):
                 return
-            relation = self.model.get_relation(INGRESS_RELATION_NAME)
+            relation = self.model.get_relation(self.relation_name)
             if relation:
                 for key in self.config_dict:
                     relation.data[self.model.app][key] = str(self.config_dict[key])

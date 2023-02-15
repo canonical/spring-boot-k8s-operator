@@ -18,8 +18,8 @@ WRAPPER_LIBRARY_MAP: dict[str, dict[str, str]] = {
         "callback": "_on_database_changed",
     },
     "nginx_ingress": {
-        "class": "NginxClientWrapper",
-        "library": "charms.paas.v0.nginx_client_wrapper",
+        "class": "NginxIngressWrapper",
+        "library": "charms.paas.v0.nginx_ingress_wrapper",
         "callback": "_on_ingress_changed",
     },
 }
@@ -33,25 +33,23 @@ class PAASCharmBase(CharmBase):
     def __init__(self, *args) -> None:
         super().__init__(*args)
         for requires in self.meta.requires.values():
-            if requires.interface_name not in WRAPPER_LIBRARY_MAP:
+            if requires.relation_name not in WRAPPER_LIBRARY_MAP:
                 logging.warning(
-                    f"Declared required interface {requires.interface_name} not found in PAASCharmBase library map, ignoring."
+                    f"Declared required interface {requires.interface_name} / {requires.relation_name} not found in PAASCharmBase library map, ignoring."
                 )
                 continue
 
             try:
                 wrapper = importlib.import_module(
-                    WRAPPER_LIBRARY_MAP[requires.interface_name]["library"]
+                    WRAPPER_LIBRARY_MAP[requires.relation_name]["library"]
                 )
                 class_constructor = getattr(
-                    wrapper, WRAPPER_LIBRARY_MAP[requires.interface_name]["class"]
+                    wrapper, WRAPPER_LIBRARY_MAP[requires.relation_name]["class"]
                 )
-                self.wrappers[requires.interface_name] = class_constructor(self)
-                logging.debug(
-                    f"Wrapper for {requires.interface_name} instantiated and registered."
-                )
+                self.wrappers[requires.relation_name] = class_constructor(self)
+                logging.debug(f"Wrapper for {requires.relation_name} instantiated and registered.")
             except ImportError as e:
-                logging.warning(f"Can't import wrapper for {requires.interface_name}, ignoring.")
+                logging.warning(f"Can't import wrapper for {requires.relation_name}, ignoring.")
 
     def reconcile(self, event: EventBase) -> None:
         """Reconciliation callback for integration management

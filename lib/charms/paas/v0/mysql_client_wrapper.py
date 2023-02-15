@@ -5,12 +5,12 @@ from ops.framework import EventBase
 
 class MysqlClientWrapper:
 
-    INTERFACE_NAME = "mysql_client"
+    RELATION_NAME = "mysql_client"
 
     def __init__(self, charm: CharmBase) -> None:
-        self.database = DatabaseRequires(charm, self.INTERFACE_NAME, "paas", "")
+        self.database = DatabaseRequires(charm, self.RELATION_NAME, "paas", "")
         charm.framework.observe(self.database.on.database_created, charm.reconcile)
-        charm.framework.observe(charm.on[self.INTERFACE_NAME].relation_broken, charm.reconcile)
+        charm.framework.observe(charm.on[self.RELATION_NAME].relation_broken, charm.reconcile)
 
     def must_run_on(self, event: EventBase) -> bool:
         """Method that defines if this wrapper must handle the given event
@@ -21,7 +21,9 @@ class MysqlClientWrapper:
         Returns:
             bool: Whether this wrapper must handle the given event
         """
-        return isinstance(event, (DatabaseCreatedEvent, RelationBrokenEvent, RelationCreatedEvent))
+        return (
+            isinstance(event, RelationBrokenEvent) and event.relation.name == self.RELATION_NAME
+        ) or isinstance(event, DatabaseCreatedEvent)
 
     def run(self, event: EventBase, charm: CharmBase) -> dict:
         """Methods that implements the business logic to react to relation events
@@ -36,4 +38,4 @@ class MysqlClientWrapper:
         """
         relation_data = self.database.fetch_relation_data()
         relation_data[event.relation.id]["database"] = self.database.database
-        return {self.INTERFACE_NAME: relation_data[event.relation.id]}
+        return {self.RELATION_NAME: relation_data[event.relation.id]}
