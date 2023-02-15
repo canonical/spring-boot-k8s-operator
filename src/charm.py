@@ -8,11 +8,13 @@ import json
 import logging
 import re
 import typing
+from collections import defaultdict
 
 import kubernetes.client
 import ops.charm
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
-from ops.charm import CharmBase, CharmEvents, EventBase
+from charms.paas.v0.paas_charm_base import PAASCharmBase
+from ops.charm import CharmEvents, EventBase
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 JAVA_TOOL_OPTIONS = "JAVA_TOOL_OPTIONS"
 
 
-class SpringBootCharm(CharmBase):
+class SpringBootCharm(PAASCharmBase):
     """Spring Boot Charm service.
 
     Attrs:
@@ -45,6 +47,16 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.config_changed, self.reconciliation)
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
         self.ingress = IngressRequires(self, self._nginx_ingress_config())
+
+    def _on_database_changed(self, event: EventBase, data: dict) -> None:
+        """Method used as a callback for database integration changes.
+
+        Args:
+            event (EventBase): Event that triggered the callback
+            data (dict): Relation data
+        """
+        self.app_data.update(data)
+        self.reconciliation()
 
     def _nginx_ingress_config(self) -> typing.Dict[str, str]:
         """Generate ingress configuration based on the Spring Boot application and charm configs.
@@ -73,7 +85,6 @@ class SpringBootCharm(CharmBase):
 
         Returns:
             The value of the charm configuration application-config.
-
         Raises:
             ReconciliationError: when application-config is invalid.
         """
@@ -81,8 +92,9 @@ class SpringBootCharm(CharmBase):
             config = self.model.config["application-config"]
             if not config:
                 return None
-            application_config = json.loads(config)
+            application_config = json.loads(config, object_hook=lambda d: defaultdict(dict, d))
             if isinstance(application_config, dict):
+                application_config["spring"]["datasource"] = self._datasource()
                 return application_config
             logger.error("Invalid application-config value: %s", repr(config))
             raise ReconciliationError(
@@ -94,6 +106,48 @@ class SpringBootCharm(CharmBase):
             raise ReconciliationError(
                 new_status=BlockedStatus("Invalid application-config value, expecting JSON")
             ) from exc
+
+    def _datasource(self) -> dict[str, str]:
+        """Compute datasource dict and return it.
+        Returns:
+            Dict containing details about the data provider integration
+        """
+        # Default results when something went wrong
+        default = {
+            "username": "",
+            "password": "",
+            "url": "",
+        }
+
+        if "mysql_client" not in self.app_data:
+            logger.warning("No relation data")
+            return default
+
+        relations_data = list(self.app_data["mysql_client"].values())
+
+        if not relations_data:
+            logger.warning(
+                "No relation data from data provider: %s", self.app_data["mysql_client"].database
+            )
+            return default
+
+        # There can be only one database integrated at a time
+        # see: metadata.yaml
+        data = relations_data[0]
+
+        # Let's check that the relation data is well formed according to the following json_schema:
+        # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
+        if not all(data.get(key) for key in ("endpoints", "username", "password")):
+            logger.warning("Incorrect relation data from the data provider: %s", data)
+            return default
+
+        database_name = data.get("database", self.app_data["mysql_client"].database)
+        endpoint = data["endpoints"].split(",")[0]
+        return {
+            "username": data["username"],
+            "password": data["password"],
+            "url": f"jdbc:mysql://{endpoint}/{database_name}",
+        }
 
     def _spring_boot_port(self) -> int:
         """Get the Spring Boot application server port, default to 8080.
