@@ -139,7 +139,7 @@ class SpringBootCharm(CharmBase):
             "url": f"jdbc:mysql://{endpoint}/{database_name}",
         }
 
-    def _application_config(self) -> dict | None:
+    def _application_config(self) -> dict:
         """Decode the value of the charm configuration application-config.
 
         Returns:
@@ -150,8 +150,6 @@ class SpringBootCharm(CharmBase):
         """
         try:
             config = self.model.config["application-config"]
-            if not config:
-                return None
             application_config = json.loads(config, object_hook=lambda d: defaultdict(dict, d))
             if isinstance(application_config, dict):
                 application_config["spring"]["datasource"] = self._datasource()
