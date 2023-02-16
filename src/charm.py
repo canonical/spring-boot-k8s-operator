@@ -92,7 +92,7 @@ class SpringBootCharm(CharmBase):
             database_name=database_name,
         )
         self.framework.observe(database_requirer.on.database_created, self.reconciliation)
-        self.framework.observe(self.on[relation_name].relation_broken, self.reconciliation)
+        self.framework.observe(self.on[relation_name].relation_broken, self.stop_service)
         return database_requirer
 
     def _datasource(self) -> dict[str, str]:
@@ -432,6 +432,12 @@ class SpringBootCharm(CharmBase):
             return False
 
         return True
+
+    def stop_service(self, event: EventBase) -> None:
+        logger.warning("Stop spring-boot-app, triggered by %s", event)
+        container = self._spring_boot_container()
+        container.stop("spring-boot-app")
+        self.unit.status = WaitingStatus("Waiting for the database availability")
 
     def _service_reconciliation(self) -> None:
         """Run the reconciliation process for pebble services."""
