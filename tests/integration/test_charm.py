@@ -7,11 +7,13 @@
 import asyncio
 import json
 import logging
-import ops
 
+import juju
+import ops
 import ops.model
 import pytest
 import requests
+from integration.conftest import Relation, Service
 from pytest_operator.plugin import OpsTest
 
 logger = logging.getLogger(__name__)
@@ -22,8 +24,10 @@ MEM_1G_APP_NAME = f"{APP_NAME}-1g"
 MEM_1G_BUILDPACK_APP_NAME = f"{BUILDPACK_APP_NAME}-1g"
 ALL_APP_NAMES = [APP_NAME, BUILDPACK_APP_NAME, MEM_1G_APP_NAME, MEM_1G_BUILDPACK_APP_NAME]
 INGRESS_NAME = "nginx-ingress-integrator"
+DATABASE_NAME = "mysql-k8s"
 
 ACTIVE_STATUS: str = ops.model.ActiveStatus.name  # type: ignore
+WAITING_STATUS: str = ops.model.WaitingStatus.name  # type: ignore
 
 
 @pytest.mark.abort_on_fail
@@ -64,8 +68,9 @@ async def test_build_and_deploy(ops_test: OpsTest, get_unit_ip_list) -> None:
             constraints={"mem": 512},
         ),
         ops_test.model.deploy(INGRESS_NAME, series="focal", trust=True),
+        ops_test.model.deploy(DATABASE_NAME, channel="edge"),
         ops_test.model.wait_for_idle(
-            apps=ALL_APP_NAMES + [INGRESS_NAME],
+            apps=ALL_APP_NAMES + [INGRESS_NAME, DATABASE_NAME],
             status="active",
         ),
     )
@@ -226,3 +231,82 @@ async def test_ingress(ops_test: OpsTest) -> None:
     )
     assert response.status_code == 200
     assert "world" in response.text.lower()
+
+
+@pytest.mark.parametrize(
+    "app",
+    [
+        {
+            "resources": {
+                "spring-boot-app-image": "ghcr.io/canonical/spring-boot:3.0-mysql",
+            },
+            "services": (
+                Service(name="mysql-k8s", channel="edge"),
+                Service(name="nginx-ingress-integrator", series="focal", trust=True),
+            ),
+            "relations": (
+                Relation(source="spring-boot-k8s", target="mysql-k8s:database"),
+                Relation(source="spring-boot-k8s", target="nginx-ingress-integrator:ingress"),
+            ),
+        }
+    ],
+    indirect=True,
+)
+async def test_database_relation(ops_test: OpsTest, app: juju.application.Application) -> None:
+    """
+    arrange: deploy Spring Boot application, services and add relations.
+    act: add a user through the application API, destroy the relation and recreate it
+    assert: the spring-boot app's API should work when everything is set up
+            and the charm shouldn't crash if the relation to the database is removed
+    """
+    assert ops_test.model
+
+    # test response to hello-world
+    response = requests.get("http://127.0.0.1/hello-world", headers={"Host": app.name}, timeout=5)
+    assert response.status_code == 200
+    assert "world" in response.text.lower()
+
+    response = requests.get(
+        "http://127.0.0.1/users",
+        headers={"Host": app.name, "Content-type": "application/json"},
+        timeout=5,
+    )
+    assert response.status_code == 200
+    # there are 2 entities by default
+    assert len(response.json()) == 2
+
+    data = {
+        "email": "test-user@spring.test",
+        "login": "test-user",
+    }
+    response = requests.post(
+        "http://127.0.0.1/users",
+        headers={"Host": app.name, "Content-type": "application/json"},
+        data=json.dumps(data),
+        timeout=5,
+    )
+    assert response.status_code == 201
+
+    response = requests.get(
+        "http://127.0.0.1/users",
+        headers={"Host": app.name, "Content-type": "application/json"},
+        timeout=5,
+    )
+    assert len(response.json()) == 3
+    assert response.json()[2]["login"] == data["login"]
+
+    await app.destroy_relation("database", "mysql-k8s:database")
+    await ops_test.model.wait_for_idle(apps=[app.name], status=WAITING_STATUS)
+
+    await ops_test.model.add_relation(app.name, "mysql-k8s:database")
+    await ops_test.model.wait_for_idle(status=ACTIVE_STATUS)
+
+    response = requests.get(
+        "http://127.0.0.1/users",
+        headers={"Host": app.name, "Content-type": "application/json"},
+        timeout=5,
+    )
+    assert response.status_code == 200
+    # In this test, it would have a length of 3
+    # because the old data would still be there
+    assert len(response.json()) > 0
