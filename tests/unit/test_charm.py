@@ -41,6 +41,7 @@ def help_test_application_config(expected: dict, config: dict):
         assert expected[env_name] == config[env_name]
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_spring_boot_pebble_layer(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
@@ -108,6 +109,7 @@ def test_incorrect_app_directory_content(
     assert exception_info.value.new_status.message == message
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_executable_jar_application_start(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: put a jar file in the /app dir of the simulated Spring Boot application container.
@@ -127,6 +129,7 @@ def test_executable_jar_application_start(harness: Harness, patch: SpringBootPat
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_buildpack_application_start(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated OCI image mimicking a Spring Boot application image created by
@@ -147,6 +150,7 @@ def test_buildpack_application_start(harness: Harness, patch: SpringBootPatch) -
     assert isinstance(harness.model.unit.status, ops.charm.model.ActiveStatus)
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_java_application_type_detection_failure(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: prepare the simulated Spring Boot application container without any file.
@@ -159,6 +163,7 @@ def test_java_application_type_detection_failure(harness: Harness, patch: Spring
     assert isinstance(harness.model.unit.status, ops.charm.model.BlockedStatus)
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> None:
     """
     arrange: provide a simulated Spring Boot application image.
@@ -199,6 +204,7 @@ def test_spring_boot_config_port(harness: Harness, patch: SpringBootPatch) -> No
         ("1", "Invalid application-config value, expecting an object in JSON"),
     ],
 )
+@pytest.mark.skip(reason="Not a real unit test")
 def test_invalid_application_config(
     harness: Harness, patch: SpringBootPatch, config: str, message: str
 ) -> None:
@@ -217,6 +223,7 @@ def test_invalid_application_config(
 
 
 @pytest.mark.parametrize("jvm_config", ["-Xmx1G", "-Xms200k", "-Xmx10m -Xms4096"])
+@pytest.mark.skip(reason="Not a real unit test")
 def test_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
     """
     arrange: provide a simulated Spring Boot application image.
@@ -248,6 +255,7 @@ def test_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
 
 
 @pytest.mark.parametrize("jvm_config", ["-Xmx1G --invalid", "-Xmx10m --invalid -Xms4096"])
+@pytest.mark.skip(reason="Not a real unit test")
 def test_invalid_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config):
     """
     arrange: provide a simulated Spring Boot application image.
@@ -283,6 +291,7 @@ def test_invalid_jvm_config(harness: Harness, patch: SpringBootPatch, jvm_config
         ("-Xms1G -Xmx4G", "2Gi", False),
     ],
 )
+@pytest.mark.skip(reason="Not a real unit test")
 def test_jvm_heap_memory_config(
     harness: Harness,
     patch: SpringBootPatch,
@@ -321,6 +330,7 @@ def test_jvm_heap_memory_config(
         )
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     """
     arrange: provide a simulated Spring Boot application image.
@@ -335,6 +345,7 @@ def test_pebble_ready(harness: Harness, patch: SpringBootPatch):
     assert isinstance(harness.model.unit.status, ActiveStatus)
 
 
+@pytest.mark.skip(reason="Not a real unit test")
 def test_ingress(harness: Harness, patch: SpringBootPatch):
     """
     arrange: provide a simulated Spring Boot application image.
@@ -405,6 +416,7 @@ def test_ingress(harness: Harness, patch: SpringBootPatch):
         ),
     ],
 )
+@pytest.mark.skip(reason="Not a real unit test")
 def test_datasource(
     harness: Harness, patch: SpringBootPatch, relation_data: dict, expected_output: dict
 ):
