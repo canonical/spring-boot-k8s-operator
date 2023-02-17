@@ -14,7 +14,7 @@ import kubernetes.client
 import ops.charm
 from charms.data_platform_libs.v0.data_interfaces import DatabaseRequires
 from charms.nginx_ingress_integrator.v0.ingress import IngressRequires
-from ops.charm import CharmBase, CharmEvents, EventBase
+from ops.charm import CharmBase, CharmEvents, EventBase, RelationBrokenEvent
 from ops.main import main
 from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, WaitingStatus
 from ops.pebble import ExecError
@@ -48,7 +48,7 @@ class SpringBootCharm(CharmBase):
         self.framework.observe(self.on.spring_boot_app_pebble_ready, self.reconciliation)
         self.ingress = IngressRequires(self, self._nginx_ingress_config())
         self.database_requirer: DatabaseRequires = self._setup_database_requirer(
-            "mysql", "spring-boot"
+            "database", "spring-boot"
         )
 
     def _nginx_ingress_config(self) -> typing.Dict[str, str]:
@@ -91,8 +91,8 @@ class SpringBootCharm(CharmBase):
             relation_name=relation_name,
             database_name=database_name,
         )
-        self.framework.observe(database_requirer.on.database_created, self.reconciliation)
-        self.framework.observe(self.on[relation_name].relation_broken, self.reconciliation)
+        self.framework.observe(database_requirer.on.database_created, self.start_service)
+        self.framework.observe(self.on[relation_name].relation_broken, self.stop_service)
         return database_requirer
 
     def _datasource(self) -> dict[str, str]:
@@ -116,9 +116,7 @@ class SpringBootCharm(CharmBase):
         relations_data = list(self.database_requirer.fetch_relation_data().values())
 
         if not relations_data:
-            logger.warning(
-                "No relation data from data provider: %s", self.database_requirer.database
-            )
+            logger.warning("No relation data from database provider")
             return default
 
         # There can be only one database integrated at a time
@@ -139,7 +137,7 @@ class SpringBootCharm(CharmBase):
             "url": f"jdbc:mysql://{endpoint}/{database_name}",
         }
 
-    def _application_config(self) -> dict | None:
+    def _application_config(self) -> dict:
         """Decode the value of the charm configuration application-config.
 
         Returns:
@@ -150,8 +148,6 @@ class SpringBootCharm(CharmBase):
         """
         try:
             config = self.model.config["application-config"]
-            if not config:
-                return None
             application_config = json.loads(config, object_hook=lambda d: defaultdict(dict, d))
             if isinstance(application_config, dict):
                 application_config["spring"]["datasource"] = self._datasource()
@@ -420,6 +416,58 @@ class SpringBootCharm(CharmBase):
             return 0
         return self._parse_human_readable_units(memory_limit.removesuffix("i"))
 
+    def _is_database_ready(self, event: EventBase) -> bool:
+        """Check if the needed database relation is established.
+
+        Args:
+            event: The event that triggered the _is_database_ready() check
+
+        Returns:
+            If the needed database relation have been established.
+        """
+        # If the requirer is not defined, we're not ready
+        if not hasattr(self, "database_requirer") or not self.database_requirer:
+            return False
+
+        # fetch_relation_data will not be available on *-relation-broken events
+        # if we are handling this kind of event, we should return false
+        if isinstance(event, RelationBrokenEvent):
+            return False
+
+        relations_data = list(self.database_requirer.fetch_relation_data().values())
+        if not relations_data:
+            return False
+
+        data = relations_data[0]
+
+        # Let's check that the relation data is well formed according to the following json_schema:
+        # https://github.com/canonical/charm-relation-interfaces/blob/main/interfaces/mysql_client/v0/schemas/provider.json
+        if not all(data.get(key) for key in ("endpoints", "username", "password")):
+            self.unit.status = WaitingStatus("Waiting for the database availability")
+            return False
+
+        return True
+
+    def start_service(self, event: EventBase) -> None:
+        """Start the spring-boot-app service.
+
+        Args:
+            event: The event that triggered this start_service()
+        """
+        logger.debug("Start spring-boot-app, triggered by %s", event.handle)
+        container = self._spring_boot_container()
+        container.start("spring-boot-app")
+
+    def stop_service(self, event: EventBase) -> None:
+        """Stop the spring-boot-app service.
+
+        Args:
+            event: The event that triggered this stop_service()
+        """
+        logger.debug("Stop spring-boot-app, triggered by %s", event.handle)
+        container = self._spring_boot_container()
+        container.stop("spring-boot-app")
+
     def _service_reconciliation(self) -> None:
         """Run the reconciliation process for pebble services."""
         container = self._spring_boot_container()
@@ -432,13 +480,27 @@ class SpringBootCharm(CharmBase):
         Args:
             event: the charm event that triggers the reconciliation.
         """
+        # Check if necessary relations are ready before going further
+        if not self._is_database_ready(event):
+            self.unit.status = WaitingStatus("Waiting for the database availability")
+            event.defer()
+            return
+
+        # Check if the container app is here
+        # We need it for the reconciliation
+        container = self.unit.get_container("spring-boot-app")
+        if not container.can_connect():
+            self.unit.status = WaitingStatus("Waiting for pebble")
+            event.defer()
+            return
+
         try:
-            logger.debug("Start reconciliation, triggered by %s", event)
+            logger.debug("Start reconciliation, triggered by %s", event.handle)
             self.unit.status = MaintenanceStatus("Start reconciliation process")
             self.ingress.update_config(self._nginx_ingress_config())
             self._service_reconciliation()
             self.unit.status = ActiveStatus()
-            logger.debug("Finish reconciliation, triggered by %s", event)
+            logger.debug("Finish reconciliation, triggered by %s", event.handle)
         except ReconciliationError as error:
             self.unit.status = error.new_status
             if error.defer_event:
