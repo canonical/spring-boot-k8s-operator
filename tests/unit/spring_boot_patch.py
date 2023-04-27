@@ -1,4 +1,4 @@
-# Copyright 2022 Canonical Ltd.
+# Copyright 2023 Canonical Ltd.
 # See LICENSE file for licensing details.
 
 """The mocking and patching system for Spring Boot charm unit tests."""
@@ -74,7 +74,7 @@ class OCIImageMock:
         Args:
             path: path to the output directory.
         """
-        self.files_tar.extractall(path)
+        self.files_tar.extractall(path)  # nosec
 
     @classmethod
     def builder(cls) -> "OCIImageMock.OCIImageMockBuilder":
