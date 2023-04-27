@@ -74,7 +74,7 @@ class OCIImageMock:
         Args:
             path: path to the output directory.
         """
-        self.files_tar.extractall(path)
+        self.files_tar.extractall(path)  # nosec
 
     @classmethod
     def builder(cls) -> "OCIImageMock.OCIImageMockBuilder":
